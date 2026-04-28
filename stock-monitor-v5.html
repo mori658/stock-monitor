@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Stock Monitor — Autoteam</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0D1117;--surface:#161B22;--surface2:#21262D;--surface3:#2D333B;
+  --border:#30363D;--border2:#21262D;
+  --text:#E6EDF3;--muted:#8B949E;--faint:#484F58;
+  --blue:#58A6FF;--green:#3FB950;--yellow:#D29922;--red:#F85149;
+  --purple:#BC8CFF;--orange:#FFA657;--teal:#39D353;
+}
+html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',sans-serif;font-size:14px;line-height:1.5;min-height:100vh}
+
+.page{max-width:1360px;margin:0 auto;padding:24px 24px 60px}
+
+/* ── Topbar ── */
+.topbar{display:flex;justify-content:space-between;align-items:center;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:28px;gap:16px;flex-wrap:wrap}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;transition:background .4s}
+h1{font-size:18px;font-weight:600}
+.sub{font-size:12px;color:var(--muted);margin-top:3px}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.badge{font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 12px}
+button{padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;font-family:inherit;transition:background .15s,border-color .15s}
+button:hover{background:var(--border);border-color:var(--muted)}
+button:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Progress / error ── */
+#pw{display:none;height:3px;background:var(--surface2);border-radius:2px;margin-bottom:20px;overflow:hidden}
+#pf{height:100%;background:var(--blue);width:0;transition:width .4s}
+#eb{display:none;padding:12px 16px;border:1px solid var(--red);border-radius:8px;background:rgba(248,81,73,.08);color:var(--red);font-size:13px;margin-bottom:20px}
+
+/* ── KPI row ── */
+.kpi-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:28px}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:540px){.kpi-row{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+.kpi-val{font-size:26px;font-weight:600;line-height:1}
+.kpi-sub{font-size:12px;color:var(--muted);margin-top:5px}
+
+/* ── Company tabs ── */
+.company-tabs-wrap{border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto}
+.company-tabs{display:flex;gap:0;white-space:nowrap;min-width:max-content}
+.ctab{padding:10px 20px;border:none;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;font-family:inherit;transition:color .15s,border-color .15s}
+.ctab:hover{color:var(--text);background:transparent}
+.ctab.active{color:var(--blue);border-bottom-color:var(--blue);background:transparent}
+
+/* ── Company panel ── */
+.company-panel{display:none}
+.company-panel.active{display:block}
+
+/* ── Company KPIs ── */
+.ckpi-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:20px}
+@media(max-width:800px){.ckpi-grid{grid-template-columns:repeat(3,1fr)}}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px 24px;margin-bottom:16px}
+.card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:18px}
+.card-grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}
+@media(max-width:700px){.card-grid-2{grid-template-columns:1fr}}
+
+/* ── Legend ── */
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.leg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.chart-wrap{position:relative;width:100%}
+
+/* ── Discount boxes ── */
+.disc-row{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.disc-box{flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.disc-box-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.disc-box-val{font-size:22px;font-weight:600}
+.disc-box-sub{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* ── Inner tabs ── */
+.inner-tabs{display:flex;gap:4px;margin-bottom:16px}
+.itab{padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--muted);font-size:12px}
+.itab.active{background:var(--surface2);color:var(--text);border-color:var(--blue)}
+
+/* ── vs badge ── */
+.vs-badge{display:inline-block;font-size:11px;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.vs-up{background:rgba(63,185,80,.15);color:var(--green)}
+.vs-dn{background:rgba(248,81,73,.15);color:var(--red)}
+.vs-ne{background:rgba(139,148,158,.12);color:var(--muted)}
+
+/* ── AI card ── */
+.ai-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px 24px;margin-bottom:16px}
+.ai-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.ai-card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.ai-gen-btn{padding:6px 16px;font-size:12px;border-color:var(--blue);color:var(--blue);background:rgba(88,166,255,.08)}
+.ai-gen-btn:hover{background:rgba(88,166,255,.18)}
+.ai-gen-btn:disabled{opacity:.4;cursor:not-allowed}
+.ai-body{font-size:13px;line-height:1.7;color:var(--text)}
+.ai-body.loading{color:var(--muted);font-style:italic;display:flex;align-items:center;gap:8px}
+.ai-body.empty{color:var(--faint);font-style:italic}
+.strength-list,.weakness-list{list-style:none;margin:8px 0 16px}
+.strength-list li,.weakness-list li{padding:7px 0 7px 24px;position:relative;font-size:13px;line-height:1.6;border-bottom:1px solid var(--border2)}
+.strength-list li:last-child,.weakness-list li:last-child{border-bottom:none}
+.strength-list li::before{content:'▲';position:absolute;left:0;color:var(--green);font-size:10px;top:10px}
+.weakness-list li::before{content:'▼';position:absolute;left:0;color:var(--red);font-size:10px;top:10px}
+.ai-section-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+
+/* ── Spinner ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+
+.footnote{font-size:11px;color:var(--faint);margin-top:10px}
+
+/* ── Webhook config banner ── */
+.config-banner{background:rgba(210,153,34,.08);border:1px solid rgba(210,153,34,.4);border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--yellow);display:flex;align-items:center;gap:10px}
+.config-banner a{color:var(--yellow);text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Webhook config banner — nascosto se configurato -->
+  <div class="config-banner" id="config-banner">
+    <span style="font-size:16px">⚠</span>
+    <span>Sostituisci <strong>N8N_WEBHOOK_URL</strong> nello script con l'URL del tuo webhook n8n, poi ricarica la pagina.</span>
+  </div>
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="live-dot" id="live-dot"></div>
+      <div>
+        <h1>Stock Monitor — Autoteam</h1>
+        <div class="sub" id="status">Inizializzazione...</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="badge" id="cd"></span>
+      <button id="rbtn" onclick="run()">↺ Aggiorna ora</button>
+      <button id="expbtn" onclick="exportXlsx()" style="border-color:var(--green);color:var(--green)">⬇ Esporta XLSX</button>
+    </div>
+  </div>
+
+  <div id="pw"><div id="pf"></div></div>
+  <div id="eb"></div>
+
+  <!-- Global KPIs -->
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Auto totali</div><div class="kpi-val" id="gk0" style="color:var(--blue)">—</div></div>
+    <div class="kpi"><div class="kpi-label">Senza sconto</div><div class="kpi-val" id="gk1" style="color:var(--red)">—</div><div class="kpi-sub" id="gk1p"></div></div>
+    <div class="kpi"><div class="kpi-label">Senza foto</div><div class="kpi-val" id="gk2" style="color:var(--yellow)">—</div><div class="kpi-sub" id="gk2p"></div></div>
+    <div class="kpi"><div class="kpi-label">Solo sconto azienda</div><div class="kpi-val" id="gk3" style="color:var(--orange)">—</div><div class="kpi-sub" id="gk3p"></div></div>
+    <div class="kpi"><div class="kpi-label">Solo sconto casa madre</div><div class="kpi-val" id="gk4" style="color:var(--purple)">—</div><div class="kpi-sub" id="gk4p"></div></div>
+    <div class="kpi"><div class="kpi-label">Aziende</div><div class="kpi-val" id="gk5" style="color:var(--teal)">—</div></div>
+  </div>
+
+  <!-- Company tabs -->
+  <div class="company-tabs-wrap">
+    <div class="company-tabs" id="ctabs"></div>
+  </div>
+  <div id="cpanels"></div>
+
+</div>
+
+<script>
+/* ══════════════════════════════════════════
+   CONFIGURAZIONE — modifica questi valori
+══════════════════════════════════════════ */
+const N8N_WEBHOOK_URL = 'N8N_WEBHOOK_URL'; // es. https://n8n.intergeanordest.it/webhook/autoteam-ai-analysis
+const AUTOTEAM_API    = 'https://api.intergeanordest.it';
+const APIKEY          = 'YNcQtkvzHJUVTKeVk2doF0pWt8prUllDkeZE8pw7LomgIUw6xiTINjEMXe9JdSsp';
+const PAGE_SIZE       = 200;
+const REFRESH_MS      = 30 * 60 * 1000;
+/* ══════════════════════════════════════════ */
+
+if(N8N_WEBHOOK_URL !== 'N8N_WEBHOOK_URL') document.getElementById('config-banner').style.display='none';
+
+const BP=['#58A6FF','#3FB950','#F85149','#D29922','#BC8CFF','#FFA657','#79C0FF','#56D364','#FF7B72','#E3B341','#A371F7','#F78166','#7EE787','#FFA198','#D2A8FF'];
+const PP=['#3FB950','#D29922','#F85149','#BC8CFF','#58A6FF'];
+const BK=[{l:'< 10k',a:0,b:10000},{l:'10–20k',a:10000,b:20000},{l:'20–30k',a:20000,b:30000},{l:'30–50k',a:30000,b:50000},{l:'> 50k',a:50000,b:1e9}];
+const TYPES=[{k:'new',l:'Nuovo',c:'#3FB950'},{k:'km0',l:'KM0',c:'#D29922'},{k:'used',l:'Usato',c:'#F85149'},{k:'semiannual',l:'Semestrale',c:'#58A6FF'}];
+
+let cars=[],globalStats={},charts={},nextAt=0,tmr;
+const tc='#8B949E',gc='rgba(48,54,61,0.8)';
+
+const $=id=>document.getElementById(id);
+const fmt=n=>(n||0).toLocaleString('it-IT');
+const pct=(n,t)=>t?((n/t)*100).toFixed(1)+'%':'—';
+const avg=arr=>arr.length?arr.reduce((s,v)=>s+v,0)/arr.length:0;
+const short=s=>s&&s.length>22?s.slice(0,22)+'…':(s||'N/D');
+function st(id,v){const el=$(id);if(el)el.textContent=v;}
+function setLive(c){$('live-dot').style.background=c;}
+function setErr(m){const b=$('eb');if(m){b.style.display='block';b.textContent=m;}else b.style.display='none';}
+function setPrg(p,show){$('pw').style.display=show?'block':'none';$('pf').style.width=Math.min(100,p)+'%';}
+function kill(k){if(charts[k]){charts[k].destroy();delete charts[k];}}
+
+/* ── Discount helpers ── */
+function hasBrandDisc(c)  {return !!(c.promo?.brandPromoId&&(c.promo?.discount||0)>0);}
+function hasCompanyDisc(c){return !!(c.promo?.companyPromoId&&(c.promo?.discountPromo||0)>0);}
+function hasAnyDisc(c)    {return hasBrandDisc(c)||hasCompanyDisc(c)||(c.discount||0)>0;}
+function noDiscount(c)    {return !hasAnyDisc(c);}
+
+// Casa madre: solo erpId N*, esclusi km0 e aziendali
+function isCasaMadreEligible(c){
+  return (c.erpId||'').toUpperCase().startsWith('N')
+      && c.type!=='km0'
+      && (c.stock||'').toLowerCase()!=='aziendale';
+}
+
+function stockAgeDays(c){
+  const dateStr=(c.createdAt||'').split('T')[0]; // usa solo "YYYY-MM-DD", ignora orario
+  if(!dateStr||dateStr.length<10)return null;
+  const parts=dateStr.split('-');
+  if(parts.length!==3)return null;
+  const d=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
+  if(isNaN(d.getTime()))return null;
+  const days=Math.round((Date.now()-d.getTime())/86400000);
+  if(days<0||days>730)return null;
+  return days;
+}
+
+function apiUrl(path,params={}){
+  const u=new URLSearchParams({key:APIKEY,...params});
+  return`${AUTOTEAM_API}${path}?${u}`;
+}
+
+/* ── Main data fetch ── */
+async function run(){
+  $('rbtn').disabled=true;
+  setLive('#D29922');
+  setErr(null);
+  st('status','Caricamento in corso...');
+  setPrg(0,true);
+  cars=[];
+  try{
+    let page=0,more=true,tp=null;
+    while(more&&page<100){
+      const r=await fetch(apiUrl('/cars',{page,size:PAGE_SIZE}));
+      if(!r.ok){
+        if(r.status===401)throw new Error('401 — Chiave API non valida.');
+        throw new Error('Errore API '+r.status+': '+r.statusText);
+      }
+      const d=await r.json();
+      cars=[...cars,...(d.data||[])];
+      const m=d.metadata||{};
+      if(!tp)tp=m.totalPages||Math.ceil((m.count||0)/PAGE_SIZE)||null;
+      more=m.hasNextPage??((d.data||[]).length===PAGE_SIZE);
+      if(tp)setPrg(Math.round(((page+1)/tp)*100),true);
+      st('status',`Pagina ${page+1}${tp?' di '+tp:''}… (${fmt(cars.length)} auto)`);
+      page++;
+    }
+    // Deduplica per serialNumber — l'API può restituire duplicati
+    const beforeDedup=cars.length;
+    const seen=new Set();
+    cars=cars.filter(c=>{
+      const key=c.serialNumber||c.id||JSON.stringify(c);
+      if(seen.has(key))return false;
+      seen.add(key);
+      return true;
+    });
+    const dupsRemoved=beforeDedup-cars.length;
+    if(dupsRemoved>0) console.warn(`[Stock Monitor] Rimossi ${dupsRemoved} duplicati (${beforeDedup} → ${cars.length} auto)`);
+    setPrg(100,true);
+    buildDashboard(cars);
+    nextAt=Date.now()+REFRESH_MS;
+    clearInterval(tmr);
+    tmr=setInterval(tick,1000);
+    st('status','Aggiornato: '+new Date().toLocaleTimeString('it-IT')+' — '+fmt(cars.length)+' auto'+(dupsRemoved>0?' ('+dupsRemoved+' duplicati rimossi)':''));
+    setLive('#3FB950');
+    setTimeout(()=>setPrg(0,false),600);
+  }catch(e){
+    setErr(e.message);
+    st('status','Errore nel caricamento');
+    setLive('#F85149');
+    setPrg(0,false);
+  }finally{
+    $('rbtn').disabled=false;
+  }
+}
+
+function tick(){
+  const sec=Math.max(0,Math.round((nextAt-Date.now())/1000));
+  st('cd','Aggiornamento in '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0'));
+  if(sec<=0){clearInterval(tmr);run();}
+}
+
+/* ── Stats ── */
+function computeStats(cars,companies){
+  const g={};
+  g.avgPriceByType={};
+  TYPES.forEach(t=>{
+    const s=cars.filter(c=>c.type===t.k&&(c.displayPrice||c.price||0)>0);
+    g.avgPriceByType[t.k]=avg(s.map(c=>c.displayPrice||c.price));
+  });
+  g.pctPhoto=cars.length?cars.filter(c=>c.hasPictures).length/cars.length:0;
+  g.pctNoDisc=cars.length?cars.filter(noDiscount).length/cars.length:0;
+  g.pctBrandDisc=cars.length?cars.filter(hasBrandDisc).length/cars.length:0;
+  g.pctCompanyDisc=cars.length?cars.filter(hasCompanyDisc).length/cars.length:0;
+  g.pctInStock=cars.length?cars.filter(c=>c.stock==='available'||(c.inStock===true)).length/cars.length:0;
+  const ages=cars.map(stockAgeDays).filter(x=>x!==null);
+  g.avgAge=avg(ages);
+  g.byCompany={};
+  companies.forEach(co=>{g.byCompany[co]=computeCompanyStats(cars.filter(c=>(c.company||'N/D')===co));});
+  return g;
+}
+
+function computeCompanyStats(sub){
+  const n=sub.length||1;
+  const avgPriceByType={};
+  TYPES.forEach(t=>{
+    const s=sub.filter(c=>c.type===t.k&&(c.displayPrice||c.price||0)>0);
+    avgPriceByType[t.k]=avg(s.map(c=>c.displayPrice||c.price));
+  });
+  const ages=sub.map(stockAgeDays).filter(x=>x!==null);
+  const ageOutliers=sub.filter(c=>{
+    const d=c.createdAt?new Date(c.createdAt):null;
+    if(!d||isNaN(d.getTime()))return false;
+    const days=Math.round((Date.now()-d.getTime())/(86400000));
+    return days<0||days>730;
+  }).length;
+  const statusNorm=c=>(c.status||'').toLowerCase().trim();
+  return{
+    total:sub.length,
+    inStock:sub.filter(c=>statusNorm(c)==='in stock').length,
+    virtuale:sub.filter(c=>statusNorm(c)==='virtuale').length,
+    assegnato:sub.filter(c=>statusNorm(c)==='assegnato').length,
+    pctPhoto:sub.filter(c=>c.hasPictures).length/n,
+    pctNoDisc:sub.filter(noDiscount).length/n,
+    pctBrandDisc:sub.filter(hasBrandDisc).length/n,
+    pctCompanyDisc:sub.filter(hasCompanyDisc).length/n,
+    pctBothDisc:sub.filter(c=>hasBrandDisc(c)&&hasCompanyDisc(c)).length/n,
+    pctInStock:sub.filter(c=>statusNorm(c)==='in stock').length/n,
+    avgAge:avg(ages),
+    ageOutliers,
+    brandCount:[...new Set(sub.map(c=>c.brand||'N/D'))].length,
+    avgPriceByType,
+    typeCount:Object.fromEntries(TYPES.map(t=>[t.k,sub.filter(c=>c.type===t.k).length])),
+  };
+}
+
+function buildDashboard(cars){
+  // Raggruppa per dealerId (come fa il sito), usa company come etichetta display
+  const dealerMap={};
+  for(const c of cars){
+    const did=c.dealerId||'N/D';
+    if(!dealerMap[did]){
+      dealerMap[did]={
+        dealerId:did,
+        label:c.company||c.venue?.venue||did,
+        cars:[]
+      };
+    }
+    dealerMap[did].cars.push(c);
+  }
+  const dealers=Object.values(dealerMap).sort((a,b)=>a.label.localeCompare(b.label));
+
+  const nd=cars.filter(noDiscount).length;
+  const np=cars.filter(c=>!c.hasPictures).length;
+  const onlyBrand=cars.filter(c=>hasBrandDisc(c)&&!hasCompanyDisc(c)).length;
+  const onlyCompany=cars.filter(c=>hasCompanyDisc(c)&&!hasBrandDisc(c)).length;
+  st('gk0',fmt(cars.length));
+  st('gk1',fmt(nd));st('gk1p',pct(nd,cars.length)+' del totale');
+  st('gk2',fmt(np));st('gk2p',pct(np,cars.length)+' del totale');
+  st('gk3',fmt(onlyCompany));st('gk3p',pct(onlyCompany,cars.length)+' del totale');
+  st('gk4',fmt(onlyBrand));st('gk4p',pct(onlyBrand,cars.length)+' del totale');
+  st('gk5',dealers.length);
+
+  globalStats=computeStats(cars,dealers.map(d=>d.dealerId));
+
+  $('ctabs').innerHTML='';
+  $('cpanels').innerHTML='';
+  dealers.forEach((d,i)=>{
+    const tab=document.createElement('button');
+    tab.className='ctab'+(i===0?' active':'');
+    tab.textContent=d.label;
+    tab.dataset.dealerid=d.dealerId;
+    tab.onclick=()=>switchTab(d.dealerId,d.label,d.cars);
+    $('ctabs').appendChild(tab);
+
+    const panel=document.createElement('div');
+    panel.id='panel-'+slugify(d.dealerId);
+    panel.className='company-panel'+(i===0?' active':'');
+    panel.innerHTML=buildCompanyPanel(d.label,d.dealerId,d.cars,globalStats,cars);
+    $('cpanels').appendChild(panel);
+  });
+
+  if(dealers.length)renderCompanyCharts(dealers[0].dealerId,dealers[0].cars);
+}
+
+function switchTab(dealerId,label,sub){
+  document.querySelectorAll('.ctab').forEach(t=>t.classList.toggle('active',t.dataset.dealerid===dealerId));
+  document.querySelectorAll('.company-panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+slugify(dealerId)));
+  renderCompanyCharts(dealerId,sub);
+}
+
+function slugify(s){return s.replace(/[^a-zA-Z0-9]/g,'_');}
+
+/* ── Stats ── */
+function computeStats(cars,dealerIds){
+  const g={};
+  g.avgPriceByType={};
+  TYPES.forEach(t=>{
+    const s=cars.filter(c=>c.type===t.k&&(c.displayPrice||c.price||0)>0);
+    g.avgPriceByType[t.k]=avg(s.map(c=>c.displayPrice||c.price));
+  });
+  g.pctPhoto=cars.length?cars.filter(c=>c.hasPictures).length/cars.length:0;
+  g.pctNoDisc=cars.length?cars.filter(noDiscount).length/cars.length:0;
+  g.pctBrandDisc=cars.length?cars.filter(hasBrandDisc).length/cars.length:0;
+  g.pctCompanyDisc=cars.length?cars.filter(hasCompanyDisc).length/cars.length:0;
+  g.pctInStock=cars.length?cars.filter(c=>(c.status||'').toLowerCase()==='in stock').length/cars.length:0;
+  const ages=cars.map(stockAgeDays).filter(x=>x!==null);
+  g.avgAge=avg(ages);
+  g.byDealer={};
+  dealerIds.forEach(did=>{g.byDealer[did]=computeCompanyStats(cars.filter(c=>(c.dealerId||'N/D')===did));});
+  return g;
+}
+function buildCompanyPanel(co,dealerId,sub,gStats,allCars){
+  const s=computeCompanyStats(sub);
+  const gs=gStats;
+  const slug=slugify(dealerId);
+
+  // "Altri" = tutti i veicoli degli altri dealer (escluso dealerId corrente)
+  const others=allCars.filter(c=>(c.dealerId||'N/D')!==dealerId);
+  const othersStats=computeCompanyStats(others);
+
+  function vsBadge(val,ref,higherIsBetter=true,label='vs altri'){
+    if(!ref)return'';
+    const diff=((val-ref)/ref*100);
+    if(Math.abs(diff)<3)return`<span class="vs-badge vs-ne">≈ ${label}</span>`;
+    const up=diff>0;
+    const good=(up&&higherIsBetter)||(!up&&!higherIsBetter);
+    return`<span class="vs-badge ${good?'vs-up':'vs-dn'}">${up?'+':''}${diff.toFixed(0)}% ${label}</span>`;
+  }
+
+  const typeRows=TYPES.map(t=>{
+    const cnt=s.typeCount[t.k]||0;
+    if(!cnt)return'';
+    const ap=s.avgPriceByType[t.k];
+    const op=othersStats.avgPriceByType[t.k]; // media degli altri, non globale
+    const opStr=op?'€'+Math.round(op).toLocaleString('it-IT'):'—';
+    return`<tr>
+      <td style="padding:7px 10px 7px 0;color:var(--muted);font-size:12px;white-space:nowrap">${t.l}</td>
+      <td style="padding:7px 12px;font-size:13px;font-weight:600">${fmt(cnt)}</td>
+      <td style="padding:7px 0;font-size:13px">${ap?'€'+Math.round(ap).toLocaleString('it-IT'):'—'}${(ap&&op)?vsBadge(ap,op,false):''}</td>
+      <td style="padding:7px 0 7px 12px;font-size:11px;color:var(--faint)">${op?'altri: '+opStr:''}</td>
+    </tr>`;
+  }).join('');
+
+  const sNew=computeCompanyStats(sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N')));
+  const sUsed=computeCompanyStats(sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U')));
+  const othersNew=computeCompanyStats(others.filter(c=>(c.erpId||'').toUpperCase().startsWith('N')));
+  const othersUsed=computeCompanyStats(others.filter(c=>(c.erpId||'').toUpperCase().startsWith('U')));
+
+  function renderKpis(ss,os){
+    return`
+    <div class="kpi">
+      <div class="kpi-label">Auto</div>
+      <div class="kpi-val" style="color:var(--blue)">${fmt(ss.total)}</div>
+      <div class="kpi-sub" style="line-height:1.8">
+        <span style="color:var(--green)">●</span> In stock: ${fmt(ss.inStock)}<br>
+        <span style="color:var(--yellow)">●</span> Virtuale: ${fmt(ss.virtuale)}<br>
+        <span style="color:var(--muted)">●</span> Assegnato: ${fmt(ss.assegnato)}
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Con foto</div>
+      <div class="kpi-val" style="color:${ss.pctPhoto>=os.pctPhoto?'var(--green)':'var(--red)'}">${(ss.pctPhoto*100).toFixed(0)}%</div>
+      <div class="kpi-sub">${vsBadge(ss.pctPhoto,os.pctPhoto,true)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Senza sconto</div>
+      <div class="kpi-val" style="color:${ss.pctNoDisc<=os.pctNoDisc?'var(--green)':'var(--red)'}">${(ss.pctNoDisc*100).toFixed(0)}%</div>
+      <div class="kpi-sub">${vsBadge(ss.pctNoDisc,os.pctNoDisc,false)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Sconto aziendale</div>
+      <div class="kpi-val" style="color:var(--orange)">${(ss.pctCompanyDisc*100).toFixed(0)}%</div>
+      <div class="kpi-sub">${vsBadge(ss.pctCompanyDisc,os.pctCompanyDisc,true)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Sconto casa madre</div>
+      <div class="kpi-val" style="color:var(--purple)">${(ss.pctBrandDisc*100).toFixed(0)}%</div>
+      <div class="kpi-sub">${vsBadge(ss.pctBrandDisc,os.pctBrandDisc,true)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Anzianità media</div>
+      <div class="kpi-val" style="color:${ss.avgAge&&ss.avgAge>180?'var(--red)':ss.avgAge&&ss.avgAge>90?'var(--yellow)':'var(--green)'}">${ss.avgAge?Math.round(ss.avgAge)+' gg':'—'}</div>
+      <div class="kpi-sub">${ss.ageOutliers?`${ss.ageOutliers} record esclusi (>730gg)`:'su record validi'}</div>
+    </div>`;
+  }
+
+  return`
+  <div style="display:flex;gap:6px;margin-bottom:20px;align-items:center">
+    <span style="font-size:12px;color:var(--muted);margin-right:4px">Filtra:</span>
+    <button class="itab active" id="f-all-${slug}" onclick="setFilter('${slug}','all')">Tutti</button>
+    <button class="itab" id="f-new-${slug}" onclick="setFilter('${slug}','new')">Nuovi (N*)</button>
+    <button class="itab" id="f-used-${slug}" onclick="setFilter('${slug}','used')">Usati (U*)</button>
+  </div>
+
+  <div id="kpi-all-${slug}" class="ckpi-grid">${renderKpis(s,othersStats)}</div>
+  <div id="kpi-new-${slug}" class="ckpi-grid" style="display:none">${renderKpis(sNew,othersNew)}</div>
+  <div id="kpi-used-${slug}" class="ckpi-grid" style="display:none">${renderKpis(sUsed,othersUsed)}</div>
+
+  <div class="card-grid-2">
+    <div class="card">
+      <div class="card-title">Composizione per tipo</div>
+      <div class="chart-wrap" style="height:200px">
+        <canvas id="pie-${slug}" role="img" aria-label="Composizione stock per tipo ${co}"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Prezzi medi per tipo vs media altri</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--muted);font-weight:500;padding:0 10px 10px 0">Tipo</th>
+          <th style="text-align:left;font-size:11px;color:var(--muted);font-weight:500;padding:0 12px 10px">N°</th>
+          <th style="text-align:left;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 10px">Prezzo medio</th>
+          <th style="text-align:left;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 10px 12px">Media altri</th>
+        </tr></thead>
+        <tbody>${typeRows||'<tr><td colspan="4" style="color:var(--faint);font-size:12px;padding:8px 0">Nessun dato</td></tr>'}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Composizione stock</div>
+    <div class="inner-tabs">
+      <button class="itab active" id="itab-b-${slug}" onclick="showInnerTab('${slug}','brand')">Per marca</button>
+      <button class="itab" id="itab-p-${slug}" onclick="showInnerTab('${slug}','price')">Per fascia prezzo</button>
+    </div>
+    <div id="leg-b-${slug}" class="legend"></div>
+    <div id="leg-p-${slug}" class="legend" style="display:none"></div>
+    <div id="wb-${slug}" class="chart-wrap" style="height:260px">
+      <canvas id="bar-brand-${slug}" role="img" aria-label="Stock per marca ${co}"></canvas>
+    </div>
+    <div id="wp-${slug}" class="chart-wrap" style="display:none;height:260px">
+      <canvas id="bar-price-${slug}" role="img" aria-label="Stock per fascia prezzo ${co}"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Dettaglio sconti</div>
+    <div id="disc-boxes-${slug}" class="disc-row"></div>
+    <div class="chart-wrap" style="height:200px">
+      <canvas id="disc-chart-${slug}" role="img" aria-label="Sconti medi per tipo ${co}"></canvas>
+    </div>
+    <div class="legend" style="margin-top:10px">
+      <span class="leg"><span class="leg-dot" style="background:var(--orange)"></span>Sconto aziendale medio %</span>
+      <span class="leg"><span class="leg-dot" style="background:var(--purple)"></span>Sconto casa madre medio %</span>
+    </div>
+    <p class="footnote">* % calcolato come (discount aziendale o casa madre) / standardPrice × 100, solo su auto con standardPrice &gt; 0.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Campagne casa madre per marca</div>
+    <div id="brand-campaign-${slug}"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Suddivisione per sede</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;align-items:flex-end">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Marca</div>
+        <select id="sede-brand-${slug}" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;min-width:150px" onchange="onSedeBrandChange('${slug}')">
+          <option value="">— Tutte le marche —</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Modello</div>
+        <select id="sede-model-${slug}" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;min-width:170px" onchange="renderSede('${slug}')">
+          <option value="">— Tutti i modelli —</option>
+        </select>
+      </div>
+      <button onclick="resetSedeFilters('${slug}')" style="font-size:12px;padding:5px 12px;color:var(--muted)">Azzera</button>
+    </div>
+    <div id="sede-chart-wrap-${slug}" style="position:relative;width:100%;height:320px">
+      <canvas id="sede-chart-${slug}" role="img" aria-label="Suddivisione stock per sede"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Composizione per sede</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;align-items:flex-end">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Sede (Ctrl/Cmd per più sedi)</div>
+        <select id="comp-sede-${slug}" multiple size="5"
+          style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;min-width:220px;max-height:130px"
+          onchange="renderCompSede('${slug}')">
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;gap:6px">
+          <button class="itab active" id="comp-tab-brand-${slug}" onclick="setCompSedeTab('${slug}','brand')">Per marca</button>
+          <button class="itab" id="comp-tab-model-${slug}" onclick="setCompSedeTab('${slug}','model')">Per modello</button>
+        </div>
+        <button onclick="resetCompSedeFilters('${slug}')" style="font-size:12px;padding:5px 12px;color:var(--muted)">Azzera selezione</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div id="comp-sede-pie-${slug}" style="position:relative;width:320px;height:320px;flex-shrink:0">
+        <canvas id="comp-sede-chart-${slug}" role="img" aria-label="Composizione auto per sede"></canvas>
+      </div>
+      <div id="comp-sede-table-${slug}" style="flex:1;min-width:220px;font-size:12px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Prezzo medio per tipo</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;align-items:flex-end">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Marca</div>
+        <select id="price-brand-${slug}" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;min-width:150px" onchange="onPriceBrandChange('${slug}')">
+          <option value="">— Tutte le marche —</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Modello</div>
+        <select id="price-model-${slug}" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;min-width:170px" onchange="renderAvgPrice('${slug}')">
+          <option value="">— Tutti i modelli —</option>
+        </select>
+      </div>
+      <button onclick="resetPriceFilters('${slug}')" style="font-size:12px;padding:5px 12px;color:var(--muted)">Azzera</button>
+    </div>
+    <div id="price-chart-wrap-${slug}" style="position:relative;width:100%;height:280px">
+      <canvas id="price-chart-${slug}" role="img" aria-label="Prezzo medio per tipo"></canvas>
+    </div>
+    <div id="price-table-${slug}" style="margin-top:16px"></div>
+  </div>
+
+  <div class="ai-card">
+    <div class="ai-card-head">
+      <div class="ai-card-title">✦ Analisi AI comparativa — Intergea Nord Est</div>
+    </div>
+
+    <!-- Upload PDF UNRAE -->
+    <div style="margin-bottom:18px">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">
+        1. Classifica UNRAE (PDF top 50 modelli)
+      </div>
+      <label id="pdf-label-${slug}" style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:12px 16px;cursor:pointer;transition:border-color .15s">
+        <span style="font-size:18px">📄</span>
+        <span id="pdf-name-${slug}" style="font-size:13px;color:var(--muted)">Carica il PDF UNRAE top 50 modelli…</span>
+        <input type="file" accept=".pdf" style="display:none" onchange="handlePdfUpload(event,'${slug}')">
+      </label>
+      <div id="pdf-preview-${slug}" style="margin-top:10px;font-size:12px;color:var(--muted);display:none">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Top 20 estratti:</div>
+        <div id="pdf-list-${slug}" style="columns:2;column-gap:20px;line-height:1.8"></div>
+      </div>
+    </div>
+
+    <!-- URL AS24 -->
+    <div style="margin-bottom:18px">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">
+        2. Link AutoScout24 (fino a 5 — es. autoscout24.it/lst/fiat/panda?…)
+      </div>
+      <div id="as24-inputs-${slug}">
+        ${[0,1,2,3,4].map(i=>`
+        <input id="as24-url-${slug}-${i}" type="url" placeholder="https://www.autoscout24.it/lst/…"
+          style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-size:12px;font-family:inherit;margin-bottom:6px;outline:none"
+          onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">`).join('')}
+      </div>
+      <div id="as24-status-${slug}" style="font-size:11px;color:var(--faint);margin-top:4px"></div>
+    </div>
+
+    <!-- Tasto genera -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <button class="ai-gen-btn" id="ai-btn-${slug}" onclick="generateAI('${dealerId}','${co}')">
+        ✦ Genera analisi comparativa
+      </button>
+      <span style="font-size:11px;color:var(--faint)">Il PDF e gli URL vengono usati solo per questa analisi</span>
+    </div>
+
+    <div id="ai-body-${slug}" class="ai-body empty">
+      Carica il PDF UNRAE e/o incolla i link AS24, poi clicca "Genera analisi".
+    </div>
+  </div>`;
+}
+
+/* ── Render Charts ── */
+function renderBrandCampaigns(sub,slug){
+  const el=$('brand-campaign-'+slug);
+  if(!el)return;
+
+  // Solo veicoli idonei casa madre: erpId N*, no km0, no aziendale
+  const eligible=sub.filter(isCasaMadreEligible);
+
+  const brands={};
+  for(const c of eligible){
+    const b=c.brand||'N/D';
+    if(!brands[b])brands[b]={total:0,withCampaign:0};
+    brands[b].total++;
+    if(hasBrandDisc(c))brands[b].withCampaign++;
+  }
+
+  const rows=Object.entries(brands).sort((a,b)=>b[1].total-a[1].total);
+
+  if(!rows.length){el.innerHTML=`<p style="color:var(--faint);font-size:12px">Nessun veicolo idoneo (N*, no km0/aziendale)</p>`;return;}
+
+  el.innerHTML=`
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr>
+          <th style="text-align:left;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 12px;width:140px">Marca</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 16px 12px;white-space:nowrap">Con campagna</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 16px 12px;white-space:nowrap">Senza campagna</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 12px;white-space:nowrap">Totale</th>
+          <th style="padding:0 0 12px 16px;width:35%"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(([brand,d])=>{
+          const pctWith=d.total?Math.round(d.withCampaign/d.total*100):0;
+          const pctWithout=100-pctWith;
+          const barColor=pctWith>=80?'var(--green)':pctWith>=40?'var(--yellow)':'var(--red)';
+          return`<tr style="border-top:1px solid var(--border2)">
+            <td style="padding:10px 0;font-size:13px;font-weight:500">${brand}</td>
+            <td style="text-align:right;padding:10px 16px;font-size:13px;color:var(--green)">${fmt(d.withCampaign)}</td>
+            <td style="text-align:right;padding:10px 16px;font-size:13px;color:var(--red)">${fmt(d.total-d.withCampaign)}</td>
+            <td style="text-align:right;padding:10px 0;font-size:12px;color:var(--muted)">${fmt(d.total)}</td>
+            <td style="padding:10px 0 10px 16px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:6px;border-radius:3px;background:var(--surface3);overflow:hidden">
+                  <div style="height:100%;width:${pctWith}%;background:${barColor};border-radius:3px;transition:width .3s"></div>
+                </div>
+                <span style="font-size:12px;font-weight:500;color:${barColor};min-width:36px;text-align:right">${pctWith}%</span>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <p style="font-size:11px;color:var(--faint);margin-top:12px">* Solo veicoli con erpId N*, esclusi km0 e aziendali. Campagna casa madre = <code>promo.brandPromoId</code> con discount &gt; 0.</p>`;
+}
+
+function renderDiscBoxes(sub,slug){
+  const isNew=c=>(c.erpId||'').toUpperCase().startsWith('N');
+  const isUsed=c=>(c.erpId||'').toUpperCase().startsWith('U');
+  const cmSub=sub.filter(isCasaMadreEligible); // N*, no km0, no aziendale
+  const usedSub=sub.filter(isUsed);
+  const el=$('disc-boxes-'+slug);
+  if(!el)return;
+  el.innerHTML=`
+    <div class="disc-box">
+      <div class="disc-box-label">Nessuno sconto</div>
+      <div class="disc-box-val" style="color:var(--red)">${fmt(sub.filter(noDiscount).length)}</div>
+      <div class="disc-box-sub">${pct(sub.filter(noDiscount).length,sub.length)} del totale</div>
+    </div>
+    <div class="disc-box">
+      <div class="disc-box-label">Solo aziendale</div>
+      <div class="disc-box-val" style="color:var(--orange)">${fmt(sub.filter(c=>hasCompanyDisc(c)&&!hasBrandDisc(c)).length)}</div>
+      <div class="disc-box-sub">${pct(sub.filter(c=>hasCompanyDisc(c)&&!hasBrandDisc(c)).length,sub.length)} del totale</div>
+    </div>
+    <div class="disc-box">
+      <div class="disc-box-label">Solo casa madre <span style="font-size:10px;color:var(--faint);text-transform:none;letter-spacing:0">(N*, no km0/az.)</span></div>
+      <div class="disc-box-val" style="color:var(--purple)">${fmt(cmSub.filter(c=>hasBrandDisc(c)&&!hasCompanyDisc(c)).length)}</div>
+      <div class="disc-box-sub">${pct(cmSub.filter(c=>hasBrandDisc(c)&&!hasCompanyDisc(c)).length,cmSub.length)} degli idonei</div>
+    </div>
+    <div class="disc-box">
+      <div class="disc-box-label">Entrambi gli sconti <span style="font-size:10px;color:var(--faint);text-transform:none;letter-spacing:0">(N*, no km0/az.)</span></div>
+      <div class="disc-box-val" style="color:var(--green)">${fmt(cmSub.filter(c=>hasBrandDisc(c)&&hasCompanyDisc(c)).length)}</div>
+      <div class="disc-box-sub">${pct(cmSub.filter(c=>hasBrandDisc(c)&&hasCompanyDisc(c)).length,cmSub.length)} degli idonei</div>
+    </div>
+    <div class="disc-box">
+      <div class="disc-box-label">Sc. aziendale usato <span style="font-size:10px;color:var(--faint);text-transform:none;letter-spacing:0">(U*)</span></div>
+      <div class="disc-box-val" style="color:var(--teal)">${fmt(usedSub.filter(hasCompanyDisc).length)}</div>
+      <div class="disc-box-sub">${pct(usedSub.filter(hasCompanyDisc).length,usedSub.length)} degli usati</div>
+    </div>`;
+}
+
+function renderCompanyCharts(dealerId,sub){
+  const slug=slugify(dealerId);
+  const s=computeCompanyStats(sub);
+
+  renderDiscBoxes(sub,slug);
+  renderBrandCampaigns(sub,slug);
+  populateSedeFilters(sub,slug);
+  populateCompSedeSelect(sub,slug);
+  renderSede(slug);
+  renderAvgPrice(slug);
+
+  kill('pie-'+slug);
+  const typeData=TYPES.map(t=>s.typeCount[t.k]||0);
+  if(typeData.some(v=>v>0)){
+    charts['pie-'+slug]=new Chart($('pie-'+slug),{
+      type:'doughnut',
+      data:{labels:TYPES.map(t=>t.l),datasets:[{data:typeData,backgroundColor:TYPES.map(t=>t.c),borderWidth:0,hoverOffset:4}]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{display:true,position:'right',labels:{color:tc,font:{size:11},padding:12,boxWidth:10}},
+          tooltip:{backgroundColor:'#161B22',titleColor:'#E6EDF3',bodyColor:tc,borderColor:'#30363D',borderWidth:1}
+        }
+      }
+    });
+  }
+
+  const bCnt={};
+  for(const car of sub)bCnt[car.brand||'N/D']=(bCnt[car.brand||'N/D']||0)+1;
+  const allBrands=Object.entries(bCnt).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  const brandTotal=allBrands.reduce((s,b)=>s+(bCnt[b]||0),0);
+  $('leg-b-'+slug).innerHTML='';
+  const brandWrap=$('wb-'+slug);
+  brandWrap.style.height=Math.max(180,allBrands.length*36+60)+'px';
+  kill('bar-brand-'+slug);
+  charts['bar-brand-'+slug]=new Chart($('bar-brand-'+slug),{
+    type:'bar',
+    data:{
+      labels:allBrands,
+      datasets:[{
+        label:'Auto',
+        data:allBrands.map(b=>bCnt[b]),
+        backgroundColor:allBrands.map((_,i)=>BP[i%BP.length]),
+        borderRadius:4,
+        borderSkipped:false,
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#161B22',titleColor:'#E6EDF3',bodyColor:tc,borderColor:'#30363D',borderWidth:1,
+          callbacks:{
+            label:ctx=>{
+              const v=ctx.parsed.x;
+              const p=brandTotal?((v/brandTotal)*100).toFixed(1):'0';
+              return` ${v} auto (${p}%)`;
+            }
+          }
+        },
+        datalabels:{
+          display:false
+        }
+      },
+      scales:{
+        x:{ticks:{color:tc,font:{size:11}},grid:{color:gc},beginAtZero:true},
+        y:{ticks:{color:tc,font:{size:12},autoSkip:false,maxRotation:0},grid:{display:false}}
+      },
+      layout:{padding:{right:8}}
+    }
+  });
+
+  $('leg-p-'+slug).innerHTML=BK.map((bk,i)=>
+    `<span class="leg"><span class="leg-dot" style="background:${PP[i]}"></span>${bk.l}</span>`
+  ).join('');
+  kill('bar-price-'+slug);
+  charts['bar-price-'+slug]=new Chart($('bar-price-'+slug),{
+    type:'bar',
+    data:{labels:['Stock'],datasets:BK.map((bk,i)=>({label:bk.l,data:[sub.filter(x=>{const p=x.displayPrice||x.price||0;return p>=bk.a&&p<bk.b}).length],backgroundColor:PP[i],borderRadius:2}))},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#161B22',titleColor:'#E6EDF3',bodyColor:tc,borderColor:'#30363D',borderWidth:1}},
+      scales:{x:{stacked:true,ticks:{color:tc,font:{size:11}},grid:{color:gc}},y:{stacked:true,ticks:{color:tc,font:{size:11}},grid:{color:gc}}}
+    }
+  });
+
+  kill('disc-chart-'+slug);
+  const cmEligible=sub.filter(isCasaMadreEligible);
+  function avgDiscPct(arr,discFn,discField){
+    return TYPES.map(t=>{
+      const s=arr.filter(c=>c.type===t.k&&discFn(c)&&(c.standardPrice||0)>0);
+      if(!s.length)return null;
+      const totD=s.reduce((x,c)=>x+(discField(c)||0),0);
+      const totP=s.reduce((x,c)=>x+(c.standardPrice||0),0);
+      return totP?parseFloat(((totD/totP)*100).toFixed(1)):null;
+    });
+  }
+  charts['disc-chart-'+slug]=new Chart($('disc-chart-'+slug),{
+    type:'bar',
+    data:{
+      labels:TYPES.map(t=>t.l),
+      datasets:[
+        {label:'Sconto aziendale %',data:avgDiscPct(sub,hasCompanyDisc,c=>c.promo?.discountPromo||0),backgroundColor:'#FFA657',borderRadius:3},
+        {label:'Sconto casa madre % (N*, no km0/az.)',data:avgDiscPct(cmEligible,hasBrandDisc,c=>c.promo?.discount||0),backgroundColor:'#BC8CFF',borderRadius:3},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{backgroundColor:'#161B22',titleColor:'#E6EDF3',bodyColor:tc,borderColor:'#30363D',borderWidth:1,
+          callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(ctx.parsed.y!=null?ctx.parsed.y.toFixed(1)+'%':'n/d')}
+        }
+      },
+      scales:{
+        x:{ticks:{color:tc,font:{size:11}},grid:{color:gc}},
+        y:{ticks:{color:tc,font:{size:11},callback:v=>v+'%'},grid:{color:gc}}
+      }
+    }
+  });
+}
+
+function showInnerTab(slug,t){
+  const ib=t==='brand';
+  $('itab-b-'+slug).className='itab'+(ib?' active':'');
+  $('itab-p-'+slug).className='itab'+(!ib?' active':'');
+  $('wb-'+slug).style.display=ib?'block':'none';
+  $('wp-'+slug).style.display=!ib?'block':'none';
+  $('leg-b-'+slug).style.display=ib?'flex':'none';
+  $('leg-p-'+slug).style.display=!ib?'flex':'none';
+}
+
+/* ── Sede & Price linked filters ── */
+function getVenueLabel(c){
+  const code=c.venue?.venueCode||'';
+  const town=c.venue?.venueTown||'';
+  if(code&&town)return`${town} (${code})`;
+  if(town)return town;
+  if(code)return code;
+  return'N/D';
+}
+
+function populateSedeFilters(sub,slug){
+  const brands=[...new Set(sub.map(c=>c.brand||'N/D'))].sort();
+  function fillBrands(id){
+    const sel=$(id);if(!sel)return;
+    const prev=sel.value;
+    sel.innerHTML='<option value="">— Tutte le marche —</option>'+
+      brands.map(b=>`<option value="${b}"${prev===b?'selected':''}>${b}</option>`).join('');
+  }
+  fillBrands('sede-brand-'+slug);
+  fillBrands('price-brand-'+slug);
+  updateSedeModels(slug);
+  updatePriceModels(slug);
+}
+
+function updateSedeModels(slug){
+  const brandSel=$('sede-brand-'+slug);
+  const modelSel=$('sede-model-'+slug);
+  if(!brandSel||!modelSel)return;
+  const tab=document.querySelector('.ctab.active');
+  if(!tab)return;
+  const dealerId=tab.dataset.dealerid;
+  let sub=cars.filter(c=>(c.dealerId||'N/D')===dealerId);
+  const activeF=['all','new','used'].find(f=>{const el=$('f-'+f+'-'+slugify(dealerId));return el&&el.classList.contains('active');})||'all';
+  if(activeF==='new')  sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+  if(activeF==='used') sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+  const brand=brandSel.value;
+  if(brand)sub=sub.filter(c=>(c.brand||'N/D')===brand);
+  const models=[...new Set(sub.map(c=>c.model||'N/D'))].sort();
+  const prev=modelSel.value;
+  modelSel.innerHTML='<option value="">— Tutti i modelli —</option>'+
+    models.map(m=>`<option value="${m}"${prev===m?'selected':''}>${m}</option>`).join('');
+}
+
+function updatePriceModels(slug){
+  const brandSel=$('price-brand-'+slug);
+  const modelSel=$('price-model-'+slug);
+  if(!brandSel||!modelSel)return;
+  const tab=document.querySelector('.ctab.active');
+  if(!tab)return;
+  const dealerId=tab.dataset.dealerid;
+  let sub=cars.filter(c=>(c.dealerId||'N/D')===dealerId);
+  const activeF=['all','new','used'].find(f=>{const el=$('f-'+f+'-'+slugify(dealerId));return el&&el.classList.contains('active');})||'all';
+  if(activeF==='new')  sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+  if(activeF==='used') sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+  const brand=brandSel.value;
+  if(brand)sub=sub.filter(c=>(c.brand||'N/D')===brand);
+  const models=[...new Set(sub.map(c=>c.model||'N/D'))].sort();
+  const prev=modelSel.value;
+  modelSel.innerHTML='<option value="">— Tutti i modelli —</option>'+
+    models.map(m=>`<option value="${m}"${prev===m?'selected':''}>${m}</option>`).join('');
+}
+
+function onSedeBrandChange(slug){updateSedeModels(slug);renderSede(slug);}
+function onPriceBrandChange(slug){updatePriceModels(slug);renderAvgPrice(slug);}
+
+function getSedeFilteredSub(slug){
+  const tab=document.querySelector('.ctab.active');
+  if(!tab)return[];
+  const dealerId=tab.dataset.dealerid;
+  let sub=cars.filter(c=>(c.dealerId||'N/D')===dealerId);
+  const activeF=['all','new','used'].find(f=>{const el=$('f-'+f+'-'+slugify(dealerId));return el&&el.classList.contains('active');})||'all';
+  if(activeF==='new')  sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+  if(activeF==='used') sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+  return sub;
+}
+
+function applyBrandModelFilter(sub,brandSel,modelSel){
+  const brand=brandSel?.value||'';
+  const model=modelSel?.value||'';
+  if(brand)sub=sub.filter(c=>(c.brand||'N/D')===brand);
+  if(model)sub=sub.filter(c=>(c.model||'N/D')===model);
+  return sub;
+}
+
+function renderSede(slug){
+  const sub=applyBrandModelFilter(getSedeFilteredSub(slug),$('sede-brand-'+slug),$('sede-model-'+slug));
+  const wrap=$('sede-chart-wrap-'+slug);
+  if(!wrap)return;
+
+  const sedeMap={};
+  for(const c of sub){
+    const sede=getVenueLabel(c);
+    const label=(c.brand||'')+(c.model?' '+c.model:'');
+    if(!sedeMap[sede])sedeMap[sede]={};
+    sedeMap[sede][label]=(sedeMap[sede][label]||0)+1;
+  }
+  const sedi=Object.keys(sedeMap).sort();
+  const allLabels=[...new Set(sub.map(c=>(c.brand||'')+(c.model?' '+c.model:'')))].sort();
+
+  kill('sede-chart-'+slug);
+  if(!sedi.length){wrap.innerHTML='<p style="color:var(--faint);font-size:12px;padding:8px 0">Nessun dato con i filtri selezionati</p>';return;}
+  wrap.style.height=Math.max(280,sedi.length*48+80)+'px';
+  wrap.innerHTML=`<canvas id="sede-chart-${slug}" role="img" aria-label="Suddivisione stock per sede"></canvas>`;
+
+  charts['sede-chart-'+slug]=new Chart($('sede-chart-'+slug),{
+    type:'bar',
+    data:{
+      labels:sedi,
+      datasets:allLabels.map((lbl,i)=>({
+        label:lbl,
+        data:sedi.map(s=>sedeMap[s][lbl]||0),
+        backgroundColor:BP[i%BP.length],
+        borderRadius:2,
+      }))
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:allLabels.length<=12,labels:{color:tc,font:{size:11},boxWidth:10,padding:10}},
+        tooltip:{
+          backgroundColor:'#161B22',titleColor:'#E6EDF3',bodyColor:tc,borderColor:'#30363D',borderWidth:1,
+          callbacks:{label:ctx=>ctx.parsed.x>0?` ${ctx.dataset.label}: ${ctx.parsed.x}`:null}
+        }
+      },
+      scales:{
+        x:{stacked:true,ticks:{color:tc,font:{size:11}},grid:{color:gc},beginAtZero:true},
+        y:{stacked:true,ticks:{color:tc,font:{size:11},autoSkip:false,maxRotation:0},grid:{display:false}}
+      }
+    }
+  });
+}
+
+function resetSedeFilters(slug){
+  const b=$('sede-brand-'+slug),m=$('sede-model-'+slug);
+  if(b)b.value='';
+  if(m){updateSedeModels(slug);}
+  renderSede(slug);
+}
+
+/* ── Avg Price chart ── */
+function renderAvgPrice(slug){
+  const sub=applyBrandModelFilter(getSedeFilteredSub(slug),$('price-brand-'+slug),$('price-model-'+slug));
+  const wrap=$('price-chart-wrap-'+slug);
+  const tableEl=$('price-table-'+slug);
+  if(!wrap)return;
+
+  kill('price-chart-'+slug);
+  if(!$('price-chart-'+slug)){
+    wrap.innerHTML=`<canvas id="price-chart-${slug}" role="img" aria-label="Prezzo medio per tipo"></canvas>`;
+  }
+
+  const PRICE_TYPES=[
+    {k:'new',l:'Nuovo',c:'#3FB950'},
+    {k:'km0',l:'KM0',c:'#D29922'},
+    {k:'used',l:'Usato',c:'#F85149'},
+    {k:'semiannual',l:'Aziendale',c:'#58A6FF'},
+  ];
+
+  const data=PRICE_TYPES.map(t=>{
+    const s=sub.filter(c=>c.type===t.k&&(c.displayPrice||c.price||0)>0);
+    return{...t,count:s.length,avgPrice:s.length?Math.round(avg(s.map(c=>c.displayPrice||c.price))):null};
+  });
+
+  const hasData=data.some(d=>d.avgPrice!==null);
+  if(!hasData){
+    wrap.style.display='none';
+    if(tableEl)tableEl.innerHTML='<p style="color:var(--faint);font-size:12px">Nessun dato con i filtri selezionati</p>';
+    return;
+  }
+  wrap.style.display='block';
+
+  charts['price-chart-'+slug]=new Chart($('price-chart-'+slug),{
+    type:'bar',
+    data:{
+      labels:data.filter(d=>d.avgPrice!==null).map(d=>d.l),
+      datasets:[{
+        label:'Prezzo medio €',
+        data:data.filter(d=>d.avgPrice!==null).map(d=>d.avgPrice),
+        backgroundColor:data.filter(d=>d.avgPrice!==null).map(d=>d.c),
+        borderRadius:4,
+        borderSkipped:false,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#161B22',titleColor:'#E6EDF3',bodyColor:tc,borderColor:'#30363D',borderWidth:1,
+          callbacks:{label:ctx=>' €'+Math.round(ctx.parsed.y).toLocaleString('it-IT')+' ('+data.find(d=>d.l===ctx.label)?.count+' auto)'}
+        }
+      },
+      scales:{
+        x:{ticks:{color:tc,font:{size:12}},grid:{display:false}},
+        y:{ticks:{color:tc,font:{size:11},callback:v=>'€'+Math.round(v).toLocaleString('it-IT')},grid:{color:gc},beginAtZero:true}
+      }
+    }
+  });
+
+  if(tableEl){
+    tableEl.innerHTML=`
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 10px">Tipo</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 10px">N° auto</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 10px">Prezzo medio</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 10px">Min</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 10px">Max</th>
+        </tr></thead>
+        <tbody>
+          ${PRICE_TYPES.map(t=>{
+            const s=sub.filter(c=>c.type===t.k&&(c.displayPrice||c.price||0)>0);
+            if(!s.length)return'';
+            const prices=s.map(c=>c.displayPrice||c.price);
+            return`<tr style="border-top:1px solid var(--border2)">
+              <td style="padding:8px 0;font-size:13px"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${t.c};margin-right:8px"></span>${t.l}</td>
+              <td style="text-align:right;padding:8px 0;font-size:13px;color:var(--muted)">${s.length}</td>
+              <td style="text-align:right;padding:8px 0;font-size:13px;font-weight:500">€${Math.round(avg(prices)).toLocaleString('it-IT')}</td>
+              <td style="text-align:right;padding:8px 0;font-size:12px;color:var(--muted)">€${Math.min(...prices).toLocaleString('it-IT')}</td>
+              <td style="text-align:right;padding:8px 0;font-size:12px;color:var(--muted)">€${Math.max(...prices).toLocaleString('it-IT')}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+}
+
+function resetPriceFilters(slug){
+  const b=$('price-brand-'+slug),m=$('price-model-'+slug);
+  if(b)b.value='';
+  if(m){updatePriceModels(slug);}
+  renderAvgPrice(slug);
+}
+
+/* ── Filter toggle ── */
+function setFilter(slug,f){
+  ['all','new','used'].forEach(v=>{
+    $('f-'+v+'-'+slug).className='itab'+(v===f?' active':'');
+    const el=$('kpi-'+v+'-'+slug);
+    if(el)el.style.display=v===f?'grid':'none';
+  });
+  // Trova il dealerId dal panel corrente (slug è il dealerId slugificato)
+  const panel=$('panel-'+slug);
+  if(!panel)return;
+  const tab=document.querySelector(`.ctab.active`);
+  if(!tab)return;
+  const dealerId=tab.dataset.dealerid;
+  if(!dealerId)return;
+  let sub=cars.filter(c=>(c.dealerId||'N/D')===dealerId);
+  if(f==='new')  sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+  if(f==='used') sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+  renderCompanyCharts(dealerId,sub,true);
+  // Aggiorna anche il select sedi con le sedi filtrate
+  populateCompSedeSelect(sub,slug);
+  renderCompSede(slug);
+}
+
+/* ── AI tab switcher ── */
+function switchAiTab(tabId,tab){
+  ['analisi','mercato'].forEach(t=>{
+    const btn=$(`${tabId}-${t}`);
+    const body=$(`${tabId}-${t}-body`);
+    const active=t===tab;
+    if(btn){btn.className='itab'+(active?' active':'');btn.style.borderBottom=active?'2px solid var(--blue)':'2px solid transparent';}
+    if(body)body.style.display=active?'block':'none';
+  });
+}
+
+/* ── PDF Upload & Parsing ── */
+// Storage globale — un solo PDF alla volta (l'ultimo caricato)
+let globalPdfModels = [];
+let globalAs24Models = []; // modelli estratti dagli URL AS24
+
+async function handlePdfUpload(evt,slug){
+  const file=evt.target.files?.[0];
+  if(!file)return;
+  $('pdf-name-'+slug).textContent=file.name;
+  $('pdf-name-'+slug).style.color='var(--text)';
+  $('pdf-preview-'+slug).style.display='none';
+
+  try{
+    if(!window.pdfjsLib){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        s.onload=res; s.onerror=()=>rej(new Error('PDF.js non caricato'));
+        document.head.appendChild(s);
+      });
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc=
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    const buf=await file.arrayBuffer();
+    const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
+
+    let fullText='';
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const content=await page.getTextContent();
+      fullText+=content.items.map(it=>it.str).join(' ')+'\n';
+    }
+
+    console.log('[PDF] Testo estratto (primi 500 car):', fullText.slice(0,500));
+
+    const models=parseUnraeText(fullText,20);
+    console.log('[PDF] Modelli estratti:', models.length, models);
+
+    // Salva globalmente
+    globalPdfModels=models;
+
+    showPdfPreview(slug,models);
+
+    if(!models.length){
+      $('pdf-name-'+slug).textContent=file.name+' — nessun modello estratto';
+      $('pdf-name-'+slug).style.color='var(--yellow)';
+    }else{
+      $('pdf-name-'+slug).textContent=file.name+' ✓ ('+models.length+' modelli)';
+      $('pdf-name-'+slug).style.color='var(--green)';
+    }
+  }catch(e){
+    console.error('[PDF] Errore:', e);
+    $('pdf-name-'+slug).textContent='Errore: '+e.message;
+    $('pdf-name-'+slug).style.color='var(--red)';
+  }
+}
+
+function parseUnraeText(text,limit=20){
+  const models=[];
+  // Pattern: numero (rank) MARCA MODELLO numero (immatricolazioni)
+  // Es: "1 DACIA SANDERO 7.142" oppure "1. Dacia Sandero 7142"
+  const re=/(?:^|\s)(\d{1,2})\.?\s+([A-ZÀÈÌÒÙ][A-ZÀÈÌÒÙa-zàèìòù\-\.]+(?:\s+[A-ZÀÈÌÒÙ0-9][A-ZÀÈÌÒÙa-zàèìòù\-\.0-9]*){1,3})\s+([\d]{1,2}[\d\.]{2,})/gm;
+  let m;
+  while((m=re.exec(text))!==null&&models.length<limit){
+    const rank=parseInt(m[1]);
+    if(rank<1||rank>50)continue;
+    const name=m[2].trim();
+    const count=parseInt(m[3].replace(/\./g,''));
+    if(count<100)continue;
+    const parts=name.split(' ');
+    const brand=parts[0].charAt(0)+parts[0].slice(1).toLowerCase();
+    const model=parts.slice(1).map(w=>w.charAt(0)+w.slice(1).toLowerCase()).join(' ').trim();
+    if(!model)continue;
+    if(!models.find(x=>x.rank===rank)){
+      models.push({rank,brand,model,registrations:count});
+    }
+  }
+  return models.sort((a,b)=>a.rank-b.rank).slice(0,limit);
+}
+
+function showPdfPreview(slug,models){
+  const preview=$('pdf-preview-'+slug);
+  const list=$('pdf-list-'+slug);
+  if(!preview||!list)return;
+  if(!models.length){
+    list.innerHTML='<span style="color:var(--red)">Nessun modello estratto — prova un PDF diverso</span>';
+  }else{
+    list.innerHTML=models.map(m=>
+      `<div><span style="color:var(--faint);min-width:22px;display:inline-block">${m.rank}.</span> <strong>${m.brand} ${m.model}</strong> <span style="color:var(--faint)">${m.registrations?m.registrations.toLocaleString('it-IT'):''}</span></div>`
+    ).join('');
+  }
+  preview.style.display='block';
+}
+
+/* ── AI Analysis via n8n ── */
+async function generateAI(dealerId,co){
+  const slug=slugify(dealerId);
+  const el=$('ai-body-'+slug);
+  const btn=$('ai-btn-'+slug);
+
+  if(N8N_WEBHOOK_URL==='N8N_WEBHOOK_URL'){
+    el.className='ai-body';
+    el.innerHTML=`<span style="color:var(--yellow)">⚠ Configura <strong>N8N_WEBHOOK_URL</strong> nello script.</span>`;
+    return;
+  }
+
+  // Raccoglie URL AS24 inseriti
+  const as24Urls=[];
+  for(let i=0;i<5;i++){
+    const val=($('as24-url-'+slug+'-'+i)||{}).value||'';
+    if(val.trim())as24Urls.push(val.trim());
+  }
+
+  // Dati UNRAE dal PDF — usa variabile globale (non per-slug)
+  const pdfModels=globalPdfModels;
+
+  console.log('[AI] globalPdfModels:', pdfModels.length, pdfModels);
+  console.log('[AI] as24Urls:', as24Urls);
+
+  if(!pdfModels.length&&!as24Urls.length){
+    el.className='ai-body';
+    el.innerHTML=`<span style="color:var(--yellow)">⚠ Carica almeno il PDF UNRAE oppure inserisci almeno un link AS24.</span>`;
+    return;
+  }
+
+  btn.disabled=true;
+  el.className='ai-body loading';
+  el.innerHTML='<div class="spinner"></div> Avvio analisi…';
+
+  const sub    = cars.filter(c=>(c.dealerId||'N/D')===dealerId);
+  const others = cars.filter(c=>(c.dealerId||'N/D')!==dealerId);
+  const s  = computeCompanyStats(sub);
+  const os = computeCompanyStats(others);
+
+  // Brand breakdown
+  const brandMap={};
+  for(const c of sub){
+    const b=c.brand||'N/D';
+    if(!brandMap[b])brandMap[b]={total:0,new:0,used:0,km0:0,prices:[],campaign:0,campaignEligible:0};
+    brandMap[b].total++;
+    if(c.type==='new')brandMap[b].new++;
+    if(c.type==='used')brandMap[b].used++;
+    if(c.type==='km0')brandMap[b].km0++;
+    if((c.displayPrice||c.price||0)>0)brandMap[b].prices.push(c.displayPrice||c.price);
+    if(isCasaMadreEligible(c)){brandMap[b].campaignEligible++;if(hasBrandDisc(c))brandMap[b].campaign++;}
+  }
+  const brandBreakdown=Object.entries(brandMap).sort((a,b)=>b[1].total-a[1].total)
+    .map(([brand,d])=>({brand,total:d.total,new:d.new,used:d.used,km0:d.km0,
+      avgPrice:d.prices.length?Math.round(avg(d.prices)):null,
+      pctCampaign:d.campaignEligible?Math.round(d.campaign/d.campaignEligible*100):null}));
+
+  // Model breakdown
+  const modelMap={};
+  for(const c of sub){
+    const key=`${c.brand||'N/D'}|||${c.model||'N/D'}`;
+    if(!modelMap[key])modelMap[key]={brand:c.brand||'N/D',model:c.model||'N/D',total:0,prices:[]};
+    modelMap[key].total++;
+    if((c.displayPrice||c.price||0)>0)modelMap[key].prices.push(c.displayPrice||c.price);
+  }
+  const topModels=Object.values(modelMap).sort((a,b)=>b.total-a.total).slice(0,10)
+    .map(d=>({brand:d.brand,model:d.model,total:d.total,
+      avgPrice:d.prices.length?Math.round(avg(d.prices)):null,
+      minPrice:d.prices.length?Math.round(Math.min(...d.prices)):null,
+      maxPrice:d.prices.length?Math.round(Math.max(...d.prices)):null}));
+
+  // Sede + price bands
+  const sedeMap={};
+  for(const c of sub){const sv=getVenueLabel(c);sedeMap[sv]=(sedeMap[sv]||0)+1;}
+  const sedeBreakdown=Object.entries(sedeMap).sort((a,b)=>b[1]-a[1]).map(([sede,n])=>({sede,count:n}));
+  const priceBands={};
+  for(const bk of BK)priceBands[bk.l]=sub.filter(c=>{const p=c.displayPrice||c.price||0;return p>=bk.a&&p<bk.b;}).length;
+  const newCars=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+  const usedCars=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+  const cmSub=sub.filter(isCasaMadreEligible);
+
+  const payload={
+    companyName:co, dealerId,
+    pdfModels,   // top 20 da UNRAE
+    as24Urls,    // URL AS24 da parsare
+    stats:{
+      total:s.total,brandCount:s.brandCount,
+      pctPhoto:+(s.pctPhoto*100).toFixed(1),
+      pctNoDisc:+(s.pctNoDisc*100).toFixed(1),
+      pctCompanyDisc:+(s.pctCompanyDisc*100).toFixed(1),
+      pctBrandDisc:+(s.pctBrandDisc*100).toFixed(1),
+      pctBothDisc:+(s.pctBothDisc*100).toFixed(1),
+      pctInStock:+(s.pctInStock*100).toFixed(1),
+      avgAge:s.avgAge?Math.round(s.avgAge):null,
+      inStock:s.inStock,virtuale:s.virtuale,assegnato:s.assegnato,
+      typeCount:s.typeCount,
+      avgPriceByType:Object.fromEntries(Object.entries(s.avgPriceByType).map(([k,v])=>[k,v?Math.round(v):null])),
+      newTotal:newCars.length,usedTotal:usedCars.length,
+      newPctNoDisc:newCars.length?+(newCars.filter(noDiscount).length/newCars.length*100).toFixed(1):null,
+      usedPctNoDisc:usedCars.length?+(usedCars.filter(noDiscount).length/usedCars.length*100).toFixed(1):null,
+      usedPctCompanyDisc:usedCars.length?+(usedCars.filter(hasCompanyDisc).length/usedCars.length*100).toFixed(1):null,
+      cmEligible:cmSub.length,cmWithCampaign:cmSub.filter(hasBrandDisc).length,
+      pctCmCoverage:cmSub.length?+(cmSub.filter(hasBrandDisc).length/cmSub.length*100).toFixed(1):null,
+      brandBreakdown,sedeBreakdown,priceBands,
+    },
+    othersStats:{
+      total:os.total,
+      pctPhoto:+(os.pctPhoto*100).toFixed(1),
+      pctNoDisc:+(os.pctNoDisc*100).toFixed(1),
+      pctCompanyDisc:+(os.pctCompanyDisc*100).toFixed(1),
+      pctBrandDisc:+(os.pctBrandDisc*100).toFixed(1),
+      pctInStock:+(os.pctInStock*100).toFixed(1),
+      avgAge:os.avgAge?Math.round(os.avgAge):null,
+      avgPriceByType:Object.fromEntries(Object.entries(os.avgPriceByType).map(([k,v])=>[k,v?Math.round(v):null])),
+    },
+    topModels,
+    as24DataBrowser,
+  };
+
+  try{
+    console.log('[AI] pdfModels:', pdfModels.length, pdfModels);
+    console.log('[AI] as24Urls:', as24Urls);
+
+    const controller=new AbortController();
+    const timeoutId=setTimeout(()=>controller.abort(),120000);
+
+    // Fetch AS24 direttamente dal browser — con parsing URL reali
+  const as24DataBrowser={};
+  if(as24Urls.length){
+    el.innerHTML='<div class="spinner"></div> Lettura pagine AutoScout24…';
+    for(const url of as24Urls){
+      // Estrai brand/model dal path — gestisce /lst/marca/modello/città?params
+      let brand='N/D', model='N/D';
+      try{
+        const pathname=new URL(url).pathname;
+        // Rimuovi /lst/ e split per /
+        const parts=pathname.replace(/^\/lst\//,'').split('/').filter(Boolean);
+        // Decodifica e capitalizza
+        const cap=s=>decodeURIComponent(s).split(/[-\s]+/).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+        if(parts[0]) brand=cap(parts[0]);
+        if(parts[1]) model=cap(parts[1]);
+        // Ignora se parts[1] sembra una città (contiene lettere maiuscole strane o %)
+        if(parts[1]&&(parts[1].includes('%20')||parts[1].match(/^[A-Z][a-z]+\s*\(/))) model='N/D';
+      }catch(e){}
+
+      const key=`${brand}|||${model}`;
+      try{
+        const r=await fetch(url);
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        const html=await r.text();
+        const ndm=html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+        let total=null,avgPrice=null,median=null;
+        if(ndm){
+          try{
+            const nd=JSON.parse(ndm[1]);
+            function df(obj,key,d=0){
+              if(d>8||!obj||typeof obj!=='object')return undefined;
+              if(key in obj)return obj[key];
+              for(const k of Object.keys(obj)){const f=df(obj[k],key,d+1);if(f!==undefined)return f;}
+            }
+            total   =df(nd,'numberOfListings')||df(nd,'totalCount');
+            avgPrice=df(nd,'average');
+            median  =df(nd,'median');
+          }catch(e){}
+        }
+        if(!total)    total    =(html.match(/"numberOfListings"\s*:\s*(\d+)/)||html.match(/"totalCount"\s*:\s*(\d+)/))?.[1];
+        if(!avgPrice) avgPrice =html.match(/"average"\s*:\s*([\d.]+)/)?.[1];
+        as24DataBrowser[key]={
+          brand,model,
+          totalListings: total    ? parseInt(total)              : null,
+          avgPrice:      avgPrice ? Math.round(parseFloat(avgPrice)) : null,
+          medianPrice:   median   ? Math.round(parseFloat(median))   : null,
+          as24Note:'da URL fornito',
+          sourceUrl: url,
+          fetchedAt: new Date().toISOString().split('T')[0]
+        };
+        console.log('[AS24]',key,'→ totale:',total,'avgPrice:',avgPrice);
+      }catch(e){
+        // CORS o altro errore — salva comunque con brand/model estratti dall'URL
+        as24DataBrowser[key]={
+          brand, model,
+          totalListings:null, avgPrice:null, medianPrice:null,
+          as24Note:'errore fetch (possibile CORS): '+e.message.slice(0,50),
+          sourceUrl:url,
+          fetchedAt: new Date().toISOString().split('T')[0]
+        };
+        console.warn('[AS24] errore per',url,e.message);
+      }
+    }
+    console.log('[AS24] dati estratti:', as24DataBrowser);
+  }
+
+  el.innerHTML='<div class="spinner"></div> Generazione analisi AI…';
+
+    const resp=await fetch(N8N_WEBHOOK_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+      signal:controller.signal
+    });
+    clearTimeout(timeoutId);
+    if(!resp.ok)throw new Error('Webhook status '+resp.status);
+    const data=await resp.json();
+
+    const raw=(data.result||'').trim();
+    const clean=raw.replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(clean.slice(clean.indexOf('{'),clean.lastIndexOf('}')+1));
+    const cost=data.cost||null;
+    const as24=data.autoscoutData||{};
+
+    function renderPoints(items,isStrength){
+      if(!items?.length)return'';
+      return items.map(item=>{
+        const title=item.title||'';const detail=item.detail||'';
+        const col=isStrength?'var(--green)':'var(--red)';
+        const bg=isStrength?'rgba(63,185,80,.06)':'rgba(248,81,73,.06)';
+        const border=isStrength?'rgba(63,185,80,.25)':'rgba(248,81,73,.25)';
+        return`<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:14px 16px;margin-bottom:10px">
+          <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
+            <span style="color:${col};font-size:11px;margin-top:2px;flex-shrink:0">${isStrength?'▲':'▼'}</span>
+            <strong style="font-size:13px;font-weight:500;line-height:1.4">${title}</strong>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.7;margin:0;padding-left:18px">${detail}</p>
+        </div>`;
+      }).join('');
+    }
+
+    // Tabella confronto mercato
+    let marketTabHtml='';
+    const as24Entries=Object.entries(as24);
+    const fetchedAt=data.fetchedAt||null;
+    const referenceMonth=data.referenceMonth||null;
+    const dataSource=data.dataSource||null;
+    if(as24Entries.length){
+      const sortedEntries=as24Entries.sort((a,b)=>(a[1].rank||99)-(b[1].rank||99));
+      const inStock=[],notInStock=[];
+      for(const [modelKey,d] of sortedEntries){
+        const[brand,model]=modelKey.split('|||');
+        const dealerModel=topModels.find(m=>m.brand===brand&&m.model===model);
+        const mktAvg=d.avgPrice?Math.round(d.avgPrice):null;
+        const dealerAvg=dealerModel?.avgPrice||null;
+        let diffHtml='—';
+        if(dealerAvg&&mktAvg){
+          const pct=((dealerAvg-mktAvg)/mktAvg*100);
+          const col=pct<=-5?'var(--green)':pct>=5?'var(--red)':'var(--muted)';
+          const label=pct<=-5?'sotto mercato':pct>=5?'sopra mercato':'in linea';
+          diffHtml=`<span style="color:${col}">${pct>0?'+':''}${pct.toFixed(0)}% <span style="font-size:10px;color:${col}">${label}</span></span>`;
+        }
+        const as24Note=d.as24Note?`<span style="font-size:10px;color:var(--faint)"> (${d.as24Note})</span>`:'';
+        const row=`<tr style="border-top:1px solid var(--border2)">
+          <td style="padding:8px 8px 8px 0;font-size:13px;color:var(--faint);text-align:center;font-weight:600">${d.rank||'—'}</td>
+          <td style="padding:8px 0;font-size:12px;font-weight:500">${brand} ${model}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:right;color:var(--muted)">${d.registrations?d.registrations.toLocaleString('it-IT'):'—'}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:center">${dealerModel?`<span style="color:var(--green)">✓ ${dealerModel.total}</span>`:`<span style="color:var(--faint)">—</span>`}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:right">${dealerAvg?'€'+dealerAvg.toLocaleString('it-IT'):'—'}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:right;color:var(--muted)">${mktAvg?'€'+mktAvg.toLocaleString('it-IT')+'':'—'}${as24Note}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:right;color:var(--faint)">${d.totalListings?d.totalListings.toLocaleString('it-IT'):'—'}</td>
+          <td style="padding:8px 0;font-size:12px;text-align:right">${diffHtml}</td>
+        </tr>`;
+        if(dealerModel)inStock.push(row);else notInStock.push(row);
+      }
+      const tableHead=`<table style="width:100%;border-collapse:collapse;min-width:580px">
+        <thead><tr>
+          <th style="text-align:center;font-size:11px;color:var(--faint);font-weight:500;padding:0 8px 10px 0">#</th>
+          <th style="text-align:left;font-size:11px;color:var(--faint);font-weight:500;padding:0 0 10px">Modello</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">Immat. IT</th>
+          <th style="text-align:center;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">In stock</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">Prezzo dealer</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">Media AS24</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">Ann. AS24</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 0 10px">Diff.</th>
+        </tr></thead><tbody>`;
+      marketTabHtml=`
+        <p style="font-size:12px;color:var(--muted);margin-bottom:16px">
+          ${referenceMonth?`<strong>${referenceMonth}</strong> — `:''}${dataSource||''}${fetchedAt?' · dati del '+fetchedAt:''}.
+          Prezzi AS24 estratti dagli URL forniti.
+        </p>
+        ${inStock.length?`<div style="font-size:11px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">In stock (${inStock.length})</div><div style="overflow-x:auto;margin-bottom:20px">${tableHead}${inStock.join('')}</tbody></table></div>`:''}
+        ${notInStock.length?`<div style="font-size:11px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;margin-top:4px">Non in stock (${notInStock.length})</div><div style="overflow-x:auto">${tableHead}${notInStock.join('')}</tbody></table></div>`:''}`;
+    }else{
+      marketTabHtml='<p style="color:var(--faint);font-size:12px">Nessun URL AS24 fornito o nessun dato estratto.</p>';
+    }
+
+    const tabId=`ai-tabs-${slug}`;
+    el.className='ai-body';
+    el.innerHTML=`
+      <div style="display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:0">
+        <button class="itab active" id="${tabId}-analisi" onclick="switchAiTab('${tabId}','analisi')" style="border-bottom:2px solid var(--blue);border-radius:0;background:transparent">Analisi</button>
+        <button class="itab" id="${tabId}-mercato" onclick="switchAiTab('${tabId}','mercato')" style="border-bottom:2px solid transparent;border-radius:0;background:transparent">Confronto mercato</button>
+      </div>
+      <div id="${tabId}-analisi-body">
+        <div style="background:var(--surface2);border-left:3px solid var(--blue);border-radius:0 6px 6px 0;padding:12px 16px;margin-bottom:20px;font-size:13px;line-height:1.7;color:var(--text)">${parsed.summary||''}</div>
+        <div class="ai-section-title" style="margin-bottom:10px">Punti di forza</div>
+        ${renderPoints(parsed.strengths,true)}
+        <div class="ai-section-title" style="margin-top:16px;margin-bottom:10px">Punti di debolezza</div>
+        ${renderPoints(parsed.weaknesses,false)}
+      </div>
+      <div id="${tabId}-mercato-body" style="display:none">${marketTabHtml}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--border2);flex-wrap:wrap;gap:8px">
+        <span style="font-size:11px;color:var(--faint)">Generato il ${new Date().toLocaleString('it-IT')}</span>
+        ${cost?`<span style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 10px;color:var(--muted)">Costo: <strong style="color:var(--text)">€${cost.eur}</strong> — ${Number(cost.inputTokens).toLocaleString('it-IT')} in / ${Number(cost.outputTokens).toLocaleString('it-IT')} out token</span>`:''}
+      </div>`;
+  }catch(e){
+    el.className='ai-body';
+    const msg=e.name==='AbortError'?'Timeout (2 min). Riprova.':e.message;
+    el.innerHTML=`<span style="color:var(--red)">Errore: ${msg}</span>`;
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+/* ── AI Analysis via n8n ── */
+async function generateAI(dealerId,co){
+  const slug=slugify(dealerId);
+  const el=$('ai-body-'+slug);
+  const btn=$('ai-btn-'+slug);
+
+  if(N8N_WEBHOOK_URL==='N8N_WEBHOOK_URL'){
+    el.className='ai-body';
+    el.innerHTML=`<span style="color:var(--yellow)">⚠ Configura <strong>N8N_WEBHOOK_URL</strong> nello script per abilitare l'analisi AI.</span>`;
+    return;
+  }
+
+  btn.disabled=true;
+  el.className='ai-body loading';
+  el.innerHTML='<div class="spinner"></div> Analisi in corso… (include ricerca dati AutoScout24 per modello, può richiedere 20-40 secondi)';
+
+  const sub    = cars.filter(c=>(c.dealerId||'N/D')===dealerId);
+  const others = cars.filter(c=>(c.dealerId||'N/D')!==dealerId);
+  const s  = computeCompanyStats(sub);
+  const os = computeCompanyStats(others);
+
+  // ── Brand breakdown ──
+  const brandMap={};
+  for(const c of sub){
+    const b=c.brand||'N/D';
+    if(!brandMap[b])brandMap[b]={total:0,new:0,used:0,km0:0,prices:[],campaign:0,campaignEligible:0};
+    brandMap[b].total++;
+    if(c.type==='new')  brandMap[b].new++;
+    if(c.type==='used') brandMap[b].used++;
+    if(c.type==='km0')  brandMap[b].km0++;
+    if((c.displayPrice||c.price||0)>0)  brandMap[b].prices.push(c.displayPrice||c.price);
+    if(isCasaMadreEligible(c)){brandMap[b].campaignEligible++;if(hasBrandDisc(c))brandMap[b].campaign++;}
+  }
+  const brandBreakdown=Object.entries(brandMap)
+    .sort((a,b)=>b[1].total-a[1].total)
+    .map(([brand,d])=>({
+      brand, total:d.total, new:d.new, used:d.used, km0:d.km0,
+      avgPrice:d.prices.length?Math.round(avg(d.prices)):null,
+      pctCampaign:d.campaignEligible?Math.round(d.campaign/d.campaignEligible*100):null,
+    }));
+
+  // ── Model breakdown (top 10 per volume) ──
+  const modelMap={};
+  for(const c of sub){
+    const key=`${c.brand||'N/D'}|||${c.model||'N/D'}`;
+    if(!modelMap[key])modelMap[key]={brand:c.brand||'N/D',model:c.model||'N/D',total:0,new:0,used:0,km0:0,prices:[]};
+    modelMap[key].total++;
+    if(c.type==='new')  modelMap[key].new++;
+    if(c.type==='used') modelMap[key].used++;
+    if(c.type==='km0')  modelMap[key].km0++;
+    if((c.displayPrice||c.price||0)>0)  modelMap[key].prices.push(c.displayPrice||c.price);
+  }
+  const topModels=Object.values(modelMap)
+    .sort((a,b)=>b.total-a.total)
+    .slice(0,10)
+    .map(d=>({
+      brand:d.brand, model:d.model, total:d.total,
+      new:d.new, used:d.used, km0:d.km0,
+      avgPrice:d.prices.length?Math.round(avg(d.prices)):null,
+      minPrice:d.prices.length?Math.round(Math.min(...d.prices)):null,
+      maxPrice:d.prices.length?Math.round(Math.max(...d.prices)):null,
+    }));
+
+  // ── Sede breakdown ──
+  const sedeMap={};
+  for(const c of sub){const sv=getVenueLabel(c);sedeMap[sv]=(sedeMap[sv]||0)+1;}
+  const sedeBreakdown=Object.entries(sedeMap).sort((a,b)=>b[1]-a[1]).map(([sede,n])=>({sede,count:n}));
+
+  // ── Price bands ──
+  const priceBands={};
+  for(const bk of BK) priceBands[bk.l]=sub.filter(c=>{const p=c.displayPrice||c.price||0;return p>=bk.a&&p<bk.b;}).length;
+
+  // ── N vs U split ──
+  const newCars  = sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+  const usedCars = sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+  const cmSub    = sub.filter(isCasaMadreEligible);
+
+  const payload = {
+    companyName: co, dealerId,
+    stats:{
+      total:s.total, brandCount:s.brandCount,
+      pctPhoto:+(s.pctPhoto*100).toFixed(1),
+      pctNoDisc:+(s.pctNoDisc*100).toFixed(1),
+      pctCompanyDisc:+(s.pctCompanyDisc*100).toFixed(1),
+      pctBrandDisc:+(s.pctBrandDisc*100).toFixed(1),
+      pctBothDisc:+(s.pctBothDisc*100).toFixed(1),
+      pctInStock:+(s.pctInStock*100).toFixed(1),
+      avgAge:s.avgAge?Math.round(s.avgAge):null,
+      inStock:s.inStock, virtuale:s.virtuale, assegnato:s.assegnato,
+      typeCount:s.typeCount,
+      avgPriceByType:Object.fromEntries(Object.entries(s.avgPriceByType).map(([k,v])=>[k,v?Math.round(v):null])),
+      newTotal:newCars.length, usedTotal:usedCars.length,
+      newPctNoDisc:newCars.length?+(newCars.filter(noDiscount).length/newCars.length*100).toFixed(1):null,
+      usedPctNoDisc:usedCars.length?+(usedCars.filter(noDiscount).length/usedCars.length*100).toFixed(1):null,
+      usedPctCompanyDisc:usedCars.length?+(usedCars.filter(hasCompanyDisc).length/usedCars.length*100).toFixed(1):null,
+      cmEligible:cmSub.length, cmWithCampaign:cmSub.filter(hasBrandDisc).length,
+      pctCmCoverage:cmSub.length?+(cmSub.filter(hasBrandDisc).length/cmSub.length*100).toFixed(1):null,
+      brandBreakdown, sedeBreakdown, priceBands,
+    },
+    othersStats:{
+      total:os.total,
+      pctPhoto:+(os.pctPhoto*100).toFixed(1),
+      pctNoDisc:+(os.pctNoDisc*100).toFixed(1),
+      pctCompanyDisc:+(os.pctCompanyDisc*100).toFixed(1),
+      pctBrandDisc:+(os.pctBrandDisc*100).toFixed(1),
+      pctInStock:+(os.pctInStock*100).toFixed(1),
+      avgAge:os.avgAge?Math.round(os.avgAge):null,
+      avgPriceByType:Object.fromEntries(Object.entries(os.avgPriceByType).map(([k,v])=>[k,v?Math.round(v):null])),
+    },
+    topModels,
+  };
+
+  try{
+    // Timeout di 180 secondi — il workflow multi-agent impiega ~75s
+    const controller=new AbortController();
+    const timeoutId=setTimeout(()=>controller.abort(),180000);
+
+    // Animazione di progresso durante l'attesa
+    let dots=0;
+    const steps=[
+      'Avvio workflow…',
+      'Agent 1: ricerca classifica Italia…',
+      'Agent 1: elaborazione risultati…',
+      'In attesa (rate limit)…',
+      'Agent 2: analisi stock e prezzi…',
+      'Agent 2: elaborazione…',
+      'Composizione risposta finale…',
+      'Quasi pronto…'
+    ];
+    const progressInterval=setInterval(()=>{
+      dots=(dots+1)%steps.length;
+      el.innerHTML=`<div class="spinner"></div> ${steps[dots]}`;
+    },9000);
+
+    const resp=await fetch(N8N_WEBHOOK_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+      signal:controller.signal
+    });
+    clearTimeout(timeoutId);
+    clearInterval(progressInterval);
+    if(!resp.ok)throw new Error('Webhook ha risposto con status '+resp.status);
+    const data=await resp.json();
+    console.log('[AI] risposta ricevuta, autoscoutData:', Object.keys(data.autoscoutData||{}).length, 'modelli');
+    const raw=(data.result||'').trim();
+    const clean=raw.replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(clean);
+    const cost=data.cost||null;
+    const as24=data.autoscoutData||{};
+
+    // Build strengths/weaknesses as discursive cards
+    function renderPoints(items,isStrength){
+      if(!items?.length)return'';
+      return items.map(item=>{
+        const title=item.title||'';
+        const detail=item.detail||item.text||'';
+        const icon=isStrength?'▲':'▼';
+        const col=isStrength?'var(--green)':'var(--red)';
+        const bg=isStrength?'rgba(63,185,80,.06)':'rgba(248,81,73,.06)';
+        const border=isStrength?'rgba(63,185,80,.25)':'rgba(248,81,73,.25)';
+        return`<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:14px 16px;margin-bottom:10px">
+          <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
+            <span style="color:${col};font-size:11px;margin-top:2px;flex-shrink:0">${icon}</span>
+            <strong style="font-size:13px;font-weight:500;line-height:1.4">${title}</strong>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.7;margin:0;padding-left:18px">${detail}</p>
+        </div>`;
+      }).join('');
+    }
+
+    // Build AS24 market comparison tab
+    const as24Entries=Object.entries(as24);
+    const fetchedAt=data.fetchedAt||null;
+    const dataSource=data.dataSource||null;
+    const referenceMonth=data.referenceMonth||null;
+    let marketTabHtml='';
+    if(as24Entries.length){
+      // Ordina per rank (dal più venduto)
+      const sortedEntries=as24Entries.sort((a,b)=>(a[1].rank||99)-(b[1].rank||99));
+      const inStock=[], notInStock=[];
+      for(const [modelKey,d] of sortedEntries){
+        const[brand,model]=modelKey.split('|||');
+        const dealerModel=topModels.find(m=>m.brand===brand&&m.model===model);
+        const mktAvg=d.avgPrice?Math.round(d.avgPrice):null;
+        const dealerAvg=dealerModel?.avgPrice||null;
+        let diffHtml='—';
+        if(dealerAvg&&mktAvg){
+          const pct=((dealerAvg-mktAvg)/mktAvg*100);
+          const col=pct<=-5?'var(--green)':pct>=5?'var(--red)':'var(--muted)';
+          const label=pct<=-5?'sotto mercato':pct>=5?'sopra mercato':'in linea';
+          diffHtml=`<span style="color:${col}">${pct>0?'+':''}${pct.toFixed(0)}% <span style="font-size:10px;color:${col}">${label}</span></span>`;
+        }
+        const row=`<tr style="border-top:1px solid var(--border2)">
+          <td style="padding:8px 8px 8px 0;font-size:13px;color:var(--faint);text-align:center;font-weight:600">${d.rank||'—'}</td>
+          <td style="padding:8px 0;font-size:12px;font-weight:500">${brand} ${model}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:right;color:var(--muted)">${d.registrations?d.registrations.toLocaleString('it-IT'):'—'}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:center">${dealerModel?`<span style="color:var(--green)">✓ ${dealerModel.total}</span>`:`<span style="color:var(--faint)">—</span>`}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:right">${dealerAvg?'€'+dealerAvg.toLocaleString('it-IT'):'—'}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:right;color:var(--muted)">${mktAvg?'€'+mktAvg.toLocaleString('it-IT'):'—'}</td>
+          <td style="padding:8px 10px;font-size:12px;text-align:right;color:var(--faint)">${d.totalListings?d.totalListings.toLocaleString('it-IT'):'—'}</td>
+          <td style="padding:8px 0;font-size:12px;text-align:right">${diffHtml}</td>
+        </tr>`;
+        if(dealerModel) inStock.push(row);
+        else notInStock.push(row);
+      }
+      const tableHead=`<table style="width:100%;border-collapse:collapse;min-width:540px">
+        <thead><tr>
+          <th style="text-align:center;font-size:11px;color:var(--faint);font-weight:500;padding:0 8px 10px 0">#</th>
+          <th style="text-align:left;font-size:11px;color:var(--faint);font-weight:500;padding:0 0 10px">Modello</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">Immat. IT</th>
+          <th style="text-align:center;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">In stock</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">Prezzo dealer</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">Media AS24</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 10px 10px">Ann. AS24</th>
+          <th style="text-align:right;font-size:11px;color:var(--faint);font-weight:500;padding:0 0 10px">Diff.</th>
+        </tr></thead><tbody>`;
+
+      marketTabHtml=`
+        <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px">
+          Top 10 modelli più immatricolati in Italia${referenceMonth?' — <strong>'+referenceMonth+'</strong>':''}${dataSource?' (fonte: '+dataSource+')':''}.<br>
+          Il prezzo dealer è la media dello stock attuale; il prezzo AS24 è la media degli annunci attivi in Italia.
+        </p>
+        ${inStock.length?`
+          <div style="font-size:11px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Modelli presenti in stock (${inStock.length})</div>
+          <div style="overflow-x:auto;margin-bottom:20px">${tableHead}${inStock.join('')}</tbody></table></div>`:''}
+        ${notInStock.length?`
+          <div style="font-size:11px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;margin-top:4px">Modelli top mercato non presenti in stock (${notInStock.length})</div>
+          <p style="font-size:11px;color:var(--faint);margin-bottom:8px">Opportunità di mercato potenziali — questi modelli sono tra i più venduti in Italia ma non sono nell'attuale stock.</p>
+          <div style="overflow-x:auto">${tableHead}${notInStock.join('')}</tbody></table></div>`:''}`;
+    } else {
+      marketTabHtml='<p style="color:var(--faint);font-size:12px">Dati AutoScout24 non disponibili per questo stock.</p>';
+    }
+
+    const tabId=`ai-tabs-${slug}`;
+    el.className='ai-body';
+    el.innerHTML=`
+      <div style="display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:0">
+        <button class="itab active" id="${tabId}-analisi" onclick="switchAiTab('${tabId}','analisi')" style="border-bottom:2px solid var(--blue);border-radius:0;background:transparent">Analisi</button>
+        <button class="itab" id="${tabId}-mercato" onclick="switchAiTab('${tabId}','mercato')" style="border-bottom:2px solid transparent;border-radius:0;background:transparent">Confronto mercato Italia</button>
+      </div>
+      <div id="${tabId}-analisi-body">
+        <div style="background:var(--surface2);border-left:3px solid var(--blue);border-radius:0 6px 6px 0;padding:12px 16px;margin-bottom:20px;font-size:13px;line-height:1.7;color:var(--text)">${parsed.summary||''}</div>
+        <div class="ai-section-title" style="margin-bottom:10px">Punti di forza</div>
+        ${renderPoints(parsed.strengths,true)}
+        <div class="ai-section-title" style="margin-top:16px;margin-bottom:10px">Punti di debolezza</div>
+        ${renderPoints(parsed.weaknesses,false)}
+      </div>
+      <div id="${tabId}-mercato-body" style="display:none">${marketTabHtml}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--border2);flex-wrap:wrap;gap:8px">
+        <span style="font-size:11px;color:var(--faint)">Generato il ${new Date().toLocaleString('it-IT')}</span>
+        ${cost?`<span style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 10px;color:var(--muted)">Costo: <strong style="color:var(--text)">€${cost.eur}</strong> — ${Number(cost.inputTokens).toLocaleString('it-IT')} in / ${Number(cost.outputTokens).toLocaleString('it-IT')} out token</span>`:''}
+      </div>`;
+  }catch(e){
+    clearInterval(progressInterval);
+    el.className='ai-body';
+    const msg=e.name==='AbortError'?'Timeout: il workflow ha impiegato più di 3 minuti. Riprova.':e.message;
+    el.innerHTML=`<span style="color:var(--red)">Errore: ${msg}</span>`;
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+/* ── Composizione per sede (torta) ── */
+const compSedeMode={}; // slug → 'brand'|'model'
+
+function populateCompSedeSelect(sub,slug){
+  const sedi=[...new Set(sub.map(c=>getVenueLabel(c)))].sort();
+  const sel=$('comp-sede-'+slug);
+  if(!sel)return;
+  const prev=[...sel.selectedOptions].map(o=>o.value);
+  sel.innerHTML=sedi.map(s=>`<option value="${s}"${prev.includes(s)?'selected':''}>${s}</option>`).join('');
+}
+
+function setCompSedeTab(slug,mode){
+  compSedeMode[slug]=mode;
+  $('comp-tab-brand-'+slug).className='itab'+(mode==='brand'?' active':'');
+  $('comp-tab-model-'+slug).className='itab'+(mode==='model'?' active':'');
+  renderCompSede(slug);
+}
+
+function resetCompSedeFilters(slug){
+  const sel=$('comp-sede-'+slug);
+  if(sel)[...sel.options].forEach(o=>o.selected=false);
+  renderCompSede(slug);
+}
+
+function renderCompSede(slug){
+  const sel=$('comp-sede-'+slug);
+  if(!sel)return;
+  const selectedSedi=[...sel.selectedOptions].map(o=>o.value);
+  const tableEl=$('comp-sede-table-'+slug);
+
+  if(!selectedSedi.length){
+    kill('comp-sede-chart-'+slug);
+    if(tableEl)tableEl.innerHTML='<p style="color:var(--faint);font-size:12px">Seleziona una o più sedi (Ctrl/Cmd per selezione multipla).</p>';
+    return;
+  }
+
+  // Rispetta il filtro N/U attivo in cima al panel
+  const tab=document.querySelector('.ctab.active');
+  if(!tab)return;
+  const dealerId=tab.dataset.dealerid;
+  let sub=cars.filter(c=>(c.dealerId||'N/D')===dealerId);
+
+  // Applica filtro N/U corrente
+  const activeF=['all','new','used'].find(f=>{
+    const el=$('f-'+f+'-'+slug);
+    return el&&el.classList.contains('active');
+  })||'all';
+  if(activeF==='new')  sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+  if(activeF==='used') sub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+
+  // Filtra per le sedi selezionate (anche più di una)
+  sub=sub.filter(c=>selectedSedi.includes(getVenueLabel(c)));
+
+  if(!sub.length){
+    kill('comp-sede-chart-'+slug);
+    if(tableEl)tableEl.innerHTML='<p style="color:var(--faint);font-size:12px">Nessuna auto per le sedi selezionate.</p>';
+    return;
+  }
+
+  const mode=compSedeMode[slug]||'brand';
+  const countMap={};
+  for(const c of sub){
+    const key=mode==='brand'?(c.brand||'N/D'):`${c.brand||'N/D'} ${c.model||''}`.trim();
+    countMap[key]=(countMap[key]||0)+1;
+  }
+  const entries=Object.entries(countMap).sort((a,b)=>b[1]-a[1]);
+  const labels=entries.map(e=>e[0]);
+  const data=entries.map(e=>e[1]);
+  const total=data.reduce((s,v)=>s+v,0);
+
+  // Titolo dinamico con sedi selezionate
+  const sedeLabel=selectedSedi.length===1?selectedSedi[0]:`${selectedSedi.length} sedi selezionate`;
+
+  kill('comp-sede-chart-'+slug);
+  const canvas=$('comp-sede-chart-'+slug);
+  if(!canvas)return;
+  charts['comp-sede-chart-'+slug]=new Chart(canvas,{
+    type:'doughnut',
+    data:{
+      labels,
+      datasets:[{data,backgroundColor:BP.slice(0,labels.length),borderWidth:0,hoverOffset:6}]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#161B22',titleColor:'#E6EDF3',bodyColor:tc,borderColor:'#30363D',borderWidth:1,
+          callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed} (${(ctx.parsed/total*100).toFixed(1)}%)`}
+        }
+      }
+    }
+  });
+
+  if(tableEl){
+    tableEl.innerHTML=`
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+        <strong>${sedeLabel}</strong>${activeF!=='all'?' · filtro: '+(activeF==='new'?'Nuovi (N*)':'Usati (U*)'):''}
+        · ${fmt(total)} auto totali
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 8px">${mode==='brand'?'Marca':'Modello'}</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 8px">Auto</th>
+          <th style="text-align:right;font-size:11px;color:var(--muted);font-weight:500;padding:0 0 8px">%</th>
+        </tr></thead>
+        <tbody>
+          ${entries.map(([label,n],i)=>`
+          <tr style="border-top:1px solid var(--border2)">
+            <td style="padding:6px 0;font-size:12px"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${BP[i%BP.length]};margin-right:6px"></span>${label}</td>
+            <td style="padding:6px 0;font-size:12px;text-align:right;font-weight:500">${n}</td>
+            <td style="padding:6px 0;font-size:12px;text-align:right;color:var(--muted)">${(n/total*100).toFixed(1)}%</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+}
+
+/* ── Export XLSX ── */
+async function exportXlsx(){
+  if(!cars.length){alert('Nessun dato da esportare — attendi il caricamento.');return;}
+  const btn=$('expbtn');
+  btn.disabled=true;btn.textContent='⏳ Esportazione…';
+
+  try{
+    // Carica SheetJS se non presente
+    if(!window.XLSX){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.onload=res;s.onerror=rej;document.head.appendChild(s);
+      });
+    }
+    const WB=XLSX.utils.book_new();
+    const companies=[...new Set(cars.map(c=>c.company||'N/D'))].sort();
+
+    // Foglio 1: Stock completo
+    const stockRows=cars.map(c=>({
+      'Azienda':c.company||'N/D',
+      'Dealer ID':c.dealerId||'N/D',
+      'Serial Number':c.serialNumber||'',
+      'Brand':c.brand||'',
+      'Modello':c.model||'',
+      'Tipo':c.type||'',
+      'erpId':c.erpId||'',
+      'Status':c.status||'',
+      'Stock':c.stock||'',
+      'Prezzo':c.displayPrice||c.price||'',
+      'Prezzo standard':c.standardPrice||'',
+      'Sconto €':c.discount||0,
+      'Sconto promo €':c.promo?.discountPromo||0,
+      'Sconto casa madre €':c.promo?.discount||0,
+      'Ha foto':c.hasPictures?'Sì':'No',
+      'Sede':getVenueLabel(c),
+      'Data creazione':(c.createdAt||'').split('T')[0],
+    }));
+    XLSX.utils.book_append_sheet(WB,XLSX.utils.json_to_sheet(stockRows),'Stock completo');
+
+    // Foglio 2: Riepilogo per azienda
+    const summaryRows=companies.map(co=>{
+      const sub=cars.filter(c=>(c.company||'N/D')===co);
+      const s=computeCompanyStats(sub);
+      const newCars=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+      const usedCars=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+      const cmSub=sub.filter(isCasaMadreEligible);
+      return{
+        'Azienda':co,
+        'Totale':s.total,
+        'In stock':s.inStock,'Virtuale':s.virtuale,'Assegnato':s.assegnato,
+        'Con foto %':(s.pctPhoto*100).toFixed(1),
+        'Senza sconto %':(s.pctNoDisc*100).toFixed(1),
+        'Sconto aziendale %':(s.pctCompanyDisc*100).toFixed(1),
+        'Sconto casa madre %':(s.pctBrandDisc*100).toFixed(1),
+        'Anzianità media gg':s.avgAge?Math.round(s.avgAge):'',
+        'Nuovi (N*)':newCars.length,
+        'Usati (U*)':usedCars.length,
+        'Nuovi senza sconto %':newCars.length?(newCars.filter(noDiscount).length/newCars.length*100).toFixed(1):'',
+        'Usati senza sconto %':usedCars.length?(usedCars.filter(noDiscount).length/usedCars.length*100).toFixed(1):'',
+        'Campagne CM idonei':cmSub.length,
+        'Campagne CM con copertura':cmSub.filter(hasBrandDisc).length,
+        'Campagne CM %':cmSub.length?(cmSub.filter(hasBrandDisc).length/cmSub.length*100).toFixed(1):'',
+        'Prezzo medio nuovo':s.avgPriceByType?.new?Math.round(s.avgPriceByType.new):'',
+        'Prezzo medio km0':s.avgPriceByType?.km0?Math.round(s.avgPriceByType.km0):'',
+        'Prezzo medio usato':s.avgPriceByType?.used?Math.round(s.avgPriceByType.used):'',
+      };
+    });
+    XLSX.utils.book_append_sheet(WB,XLSX.utils.json_to_sheet(summaryRows),'Riepilogo aziende');
+
+    // Foglio 3: Composizione per marca
+    const brandRows2=[];
+    for(const co of companies){
+      const sub=cars.filter(c=>(c.company||'N/D')===co);
+      const bCnt={};
+      for(const c of sub)bCnt[c.brand||'N/D']=(bCnt[c.brand||'N/D']||0)+1;
+      for(const [brand,n] of Object.entries(bCnt).sort((a,b)=>b[1]-a[1])){
+        brandRows2.push({'Azienda':co,'Brand':brand,'Auto':n,'%':(n/sub.length*100).toFixed(1)});
+      }
+    }
+    XLSX.utils.book_append_sheet(WB,XLSX.utils.json_to_sheet(brandRows2),'Stock per marca');
+
+    // Foglio 4: Sconti dettaglio
+    const discRows=[];
+    for(const co of companies){
+      const sub=cars.filter(c=>(c.company||'N/D')===co);
+      const newSub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('N'));
+      const usedSub=sub.filter(c=>(c.erpId||'').toUpperCase().startsWith('U'));
+      const cmSub=sub.filter(isCasaMadreEligible);
+      discRows.push({
+        'Azienda':co,
+        'Totale':sub.length,
+        'Nessuno sconto':sub.filter(noDiscount).length,
+        'Solo aziendale':sub.filter(c=>hasCompanyDisc(c)&&!hasBrandDisc(c)).length,
+        'Solo casa madre (nuovi N*, no km0)':cmSub.filter(c=>hasBrandDisc(c)&&!hasCompanyDisc(c)).length,
+        'Entrambi (nuovi N*, no km0)':cmSub.filter(c=>hasBrandDisc(c)&&hasCompanyDisc(c)).length,
+        'Sc. aziendale su usati (U*)':usedSub.filter(hasCompanyDisc).length,
+        'Idonei campagne CM':cmSub.length,
+        'Con campagna CM':cmSub.filter(hasBrandDisc).length,
+      });
+    }
+    XLSX.utils.book_append_sheet(WB,XLSX.utils.json_to_sheet(discRows),'Sconti');
+
+    // Foglio 5: Suddivisione per sede
+    const sedeRows2=[];
+    for(const co of companies){
+      const sub=cars.filter(c=>(c.company||'N/D')===co);
+      const sedeMap={};
+      for(const c of sub){const sv=getVenueLabel(c);sedeMap[sv]=(sedeMap[sv]||0)+1;}
+      for(const [sede,n] of Object.entries(sedeMap).sort((a,b)=>b[1]-a[1])){
+        sedeRows2.push({'Azienda':co,'Sede':sede,'Auto':n,'%':(n/sub.length*100).toFixed(1)});
+      }
+    }
+    XLSX.utils.book_append_sheet(WB,XLSX.utils.json_to_sheet(sedeRows2),'Sedi');
+
+    // Foglio 6: Campagne casa madre per marca
+    const campRows=[];
+    for(const co of companies){
+      const sub=cars.filter(c=>(c.company||'N/D')===co);
+      const eligible=sub.filter(isCasaMadreEligible);
+      const bMap={};
+      for(const c of eligible){
+        const b=c.brand||'N/D';
+        if(!bMap[b])bMap[b]={total:0,withCampaign:0};
+        bMap[b].total++;
+        if(hasBrandDisc(c))bMap[b].withCampaign++;
+      }
+      for(const [brand,d] of Object.entries(bMap).sort((a,b)=>b[1].total-a[1].total)){
+        campRows.push({
+          'Azienda':co,'Brand':brand,
+          'Idonei (N*, no km0/az.)':d.total,
+          'Con campagna CM':d.withCampaign,
+          'Senza campagna CM':d.total-d.withCampaign,
+          'Copertura %':(d.withCampaign/d.total*100).toFixed(1),
+        });
+      }
+    }
+    XLSX.utils.book_append_sheet(WB,XLSX.utils.json_to_sheet(campRows),'Campagne CM per marca');
+
+    // Scarica
+    const date=new Date().toISOString().split('T')[0];
+    XLSX.writeFile(WB,`stock-monitor-${date}.xlsx`);
+  }catch(e){
+    alert('Errore export: '+e.message);
+  }finally{
+    btn.disabled=false;btn.textContent='⬇ Esporta XLSX';
+  }
+}
+
+run();
+setInterval(run,REFRESH_MS);
+</script>
+</body>
+</html>
